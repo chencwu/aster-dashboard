@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/snapshot-oi",
+      "schedule": "*/5 * * * *"
+    }
+  ]
+}

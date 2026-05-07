@@ -1,0 +1,149 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Activity } from "lucide-react";
+import {
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis
+} from "recharts";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { fetchJson } from "@/lib/client-fetch";
+import { formatUsd } from "@/lib/format";
+import type { HistoryPoint, ProtocolSlug } from "@/lib/types";
+
+type Range = "5min" | "15min" | "30min" | "1h" | "4h" | "8h" | "1d" | "3d" | "7d";
+
+type HistoryResponse = {
+  ok: true;
+  points: HistoryPoint[];
+  message?: string | null;
+};
+
+type Props = {
+  title: string;
+  protocol: ProtocolSlug;
+  symbol: string;
+  metric: "oi" | "volume";
+};
+
+const ranges: Range[] = ["5min", "15min", "30min", "1h", "4h", "8h", "1d", "3d", "7d"];
+
+function volumeParams(range: Range) {
+  if (range === "5min") return { interval: "1m", limit: 6 };
+  if (range === "15min") return { interval: "1m", limit: 16 };
+  if (range === "30min") return { interval: "5m", limit: 7 };
+  if (range === "1h") return { interval: "5m", limit: 13 };
+  if (range === "4h") return { interval: "15m", limit: 17 };
+  if (range === "8h") return { interval: "30m", limit: 17 };
+  if (range === "1d") return { interval: "1h", limit: 25 };
+  if (range === "3d") return { interval: "4h", limit: 19 };
+  return { interval: "4h", limit: 43 };
+}
+
+function historyUrl(metric: "oi" | "volume", protocol: ProtocolSlug, symbol: string, range: Range) {
+  const encodedSymbol = encodeURIComponent(symbol);
+
+  if (metric === "oi") {
+    return `/api/history/oi/${protocol}/${encodedSymbol}?range=${range}`;
+  }
+
+  const params = volumeParams(range);
+  return `/api/history/volume/${protocol}/${encodedSymbol}?interval=${params.interval}&limit=${params.limit}`;
+}
+
+function formatTs(ts: number) {
+  return new Intl.DateTimeFormat("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(ts);
+}
+
+export function HistoryChart({ title, protocol, symbol, metric }: Props) {
+  const [range, setRange] = useState<Range>("7d");
+  const url = useMemo(() => historyUrl(metric, protocol, symbol, range), [metric, protocol, range, symbol]);
+  const query = useQuery({
+    queryKey: ["history", metric, protocol, symbol, range],
+    queryFn: () => fetchJson<HistoryResponse>(url),
+    enabled: Boolean(symbol),
+    refetchInterval: metric === "oi" ? 60_000 : 5 * 60_000
+  });
+
+  const points = query.data?.points ?? [];
+
+  return (
+    <Card>
+      <CardHeader className="gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <CardTitle>{title}</CardTitle>
+            <CardDescription>
+              {protocol} / {symbol}
+            </CardDescription>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {ranges.map((item) => (
+              <Button
+                key={item}
+                size="sm"
+                variant={range === item ? "default" : "secondary"}
+                onClick={() => setRange(item)}
+              >
+                {item}
+              </Button>
+            ))}
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {query.isLoading ? (
+          <div className="flex h-72 items-center justify-center gap-2 text-sm text-muted-foreground">
+            <Activity className="h-4 w-4 animate-spin" />
+            加载历史数据
+          </div>
+        ) : points.length < 2 ? (
+          <div className="flex h-72 items-center justify-center text-center text-sm text-muted-foreground">
+            {query.data?.message ?? "历史数据不足，等待采集或换一个时间档。"}
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height={288}>
+            <LineChart data={points}>
+              <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
+              <XAxis
+                dataKey="ts"
+                tickFormatter={formatTs}
+                tickLine={false}
+                axisLine={false}
+                minTickGap={28}
+              />
+              <YAxis tickFormatter={(value) => formatUsd(Number(value))} tickLine={false} axisLine={false} />
+              <Tooltip
+                labelFormatter={(value) => formatTs(Number(value))}
+                formatter={(value) => [formatUsd(Number(value)), metric.toUpperCase()]}
+                contentStyle={{ background: "#111820", border: "1px solid #26323d", borderRadius: 8, color: "#eaf2f8" }}
+                labelStyle={{ color: "#eaf2f8" }}
+                itemStyle={{ color: "#eaf2f8" }}
+              />
+              <Line
+                type="monotone"
+                dataKey="value"
+                stroke={metric === "oi" ? "#1bdfa0" : "#4ab0ff"}
+                strokeWidth={2}
+                dot={false}
+                isAnimationActive={false}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        )}
+      </CardContent>
+    </Card>
+  );
+}

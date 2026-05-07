@@ -1,0 +1,46 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 220 18% 6%;
+  --foreground: 210 20% 96%;
+  --card: 220 16% 9%;
+  --card-foreground: 210 20% 96%;
+  --muted: 220 12% 15%;
+  --muted-foreground: 215 12% 68%;
+  --primary: 162 74% 48%;
+  --primary-foreground: 220 18% 5%;
+  --accent: 198 80% 54%;
+  --accent-foreground: 220 18% 5%;
+  --destructive: 0 72% 55%;
+  --destructive-foreground: 210 20% 96%;
+  --border: 220 12% 18%;
+  --input: 220 12% 18%;
+  --ring: 162 74% 48%;
+}
+
+* {
+  border-color: hsl(var(--border));
+}
+
+html {
+  background: hsl(var(--background));
+}
+
+body {
+  min-height: 100vh;
+  background: linear-gradient(180deg, rgba(12, 20, 27, 0.96), hsl(var(--background)) 22rem);
+  color: hsl(var(--foreground));
+  font-feature-settings: "tnum";
+}
+
+::selection {
+  background: rgba(27, 223, 160, 0.3);
+}
+
+.recharts-cartesian-axis-tick text,
+.recharts-legend-item-text,
+.recharts-text {
+  fill: hsl(var(--muted-foreground));
+}

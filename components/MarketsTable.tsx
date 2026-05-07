@@ -78,6 +78,17 @@ function badgeTone(value: number | null) {
   return value >= 0 ? "positive" : "negative";
 }
 
+function historySegments(points: HistoryPoint[]) {
+  return points.slice(1).map((point, index) => {
+    const previous = points[index];
+    return {
+      key: `${previous.ts}-${point.ts}`,
+      points: [previous, point],
+      isImputed: Boolean(previous.isImputed || point.isImputed)
+    };
+  });
+}
+
 export function MarketsTable({ markets }: Props) {
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("oi");
@@ -231,7 +242,9 @@ function OiCollectionDetails({ market }: { market: Market }) {
       ),
     refetchInterval: 60_000
   });
-  const points = query.data?.points ?? [];
+  const points = useMemo(() => query.data?.points ?? [], [query.data?.points]);
+  const hasImputedPoints = points.some((point) => point.isImputed);
+  const segments = useMemo(() => historySegments(points), [points]);
 
   return (
     <div className="grid gap-4 rounded-md border bg-card p-4 lg:grid-cols-[1fr_22rem]">
@@ -279,7 +292,10 @@ function OiCollectionDetails({ market }: { market: Market }) {
               <XAxis dataKey="ts" hide />
               <YAxis hide domain={["dataMin", "dataMax"]} />
               <Tooltip
-                formatter={(value) => [formatUsd(Number(value)), "OI"]}
+                formatter={(value, _name, item) => [
+                  formatUsd(Number(value)),
+                  item.payload?.isImputed ? "OI (复用上个点)" : "OI"
+                ]}
                 labelFormatter={(value) =>
                   new Intl.DateTimeFormat("zh-CN", {
                     month: "2-digit",
@@ -292,14 +308,29 @@ function OiCollectionDetails({ market }: { market: Market }) {
                 labelStyle={{ color: "#eaf2f8" }}
                 itemStyle={{ color: "#eaf2f8" }}
               />
-              <Line
-                type="monotone"
-                dataKey="value"
-                stroke="#1bdfa0"
-                strokeWidth={2}
-                dot={false}
-                isAnimationActive={false}
-              />
+              {hasImputedPoints
+                ? segments.map((segment) => (
+                    <Line
+                      key={segment.key}
+                      data={segment.points}
+                      type="linear"
+                      dataKey="value"
+                      stroke={segment.isImputed ? "#ff5c7a" : "#1bdfa0"}
+                      strokeWidth={2}
+                      dot={false}
+                      isAnimationActive={false}
+                    />
+                  ))
+                : (
+                    <Line
+                      type="monotone"
+                      dataKey="value"
+                      stroke="#1bdfa0"
+                      strokeWidth={2}
+                      dot={false}
+                      isAnimationActive={false}
+                    />
+                  )}
             </LineChart>
           </ResponsiveContainer>
         ) : (

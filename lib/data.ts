@@ -23,8 +23,15 @@ import {
 import { cached } from "@/lib/cache";
 import { mapLimit, pctChange, sum } from "@/lib/utils";
 
-export async function getMarkets(protocol: ProtocolSlug): Promise<Market[]> {
-  return protocol === "aster" ? fetchAsterMarkets() : fetchHyperliquidMarkets();
+type GetMarketsOptions = {
+  includeInvalidForSnapshot?: boolean;
+};
+
+export async function getMarkets(
+  protocol: ProtocolSlug,
+  options: GetMarketsOptions = {}
+): Promise<Market[]> {
+  return protocol === "aster" ? fetchAsterMarkets(options) : fetchHyperliquidMarkets();
 }
 
 export async function getMarketsWithOiDeltas(protocol: ProtocolSlug) {

@@ -42,6 +42,8 @@ export type Market = {
 export type HistoryPoint = {
   ts: number;
   value: number;
+  isImputed?: boolean;
+  imputedReason?: string | null;
 };
 
 export type HistorySeries = {

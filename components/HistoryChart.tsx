@@ -67,6 +67,21 @@ function formatTs(ts: number) {
   }).format(ts);
 }
 
+function metricStroke(metric: "oi" | "volume") {
+  return metric === "oi" ? "#1bdfa0" : "#4ab0ff";
+}
+
+function historySegments(points: HistoryPoint[]) {
+  return points.slice(1).map((point, index) => {
+    const previous = points[index];
+    return {
+      key: `${previous.ts}-${point.ts}`,
+      points: [previous, point],
+      isImputed: Boolean(previous.isImputed || point.isImputed)
+    };
+  });
+}
+
 export function HistoryChart({ title, protocol, symbol, metric }: Props) {
   const [range, setRange] = useState<Range>("7d");
   const url = useMemo(() => historyUrl(metric, protocol, symbol, range), [metric, protocol, range, symbol]);
@@ -77,7 +92,9 @@ export function HistoryChart({ title, protocol, symbol, metric }: Props) {
     refetchInterval: metric === "oi" ? 60_000 : 5 * 60_000
   });
 
-  const points = query.data?.points ?? [];
+  const points = useMemo(() => query.data?.points ?? [], [query.data?.points]);
+  const hasImputedPoints = points.some((point) => point.isImputed);
+  const segments = useMemo(() => historySegments(points), [points]);
 
   return (
     <Card>
@@ -127,19 +144,39 @@ export function HistoryChart({ title, protocol, symbol, metric }: Props) {
               <YAxis tickFormatter={(value) => formatUsd(Number(value))} tickLine={false} axisLine={false} />
               <Tooltip
                 labelFormatter={(value) => formatTs(Number(value))}
-                formatter={(value) => [formatUsd(Number(value)), metric.toUpperCase()]}
+                formatter={(value, _name, item) => [
+                  formatUsd(Number(value)),
+                  item.payload?.isImputed
+                    ? `${metric.toUpperCase()} (复用上个点)`
+                    : metric.toUpperCase()
+                ]}
                 contentStyle={{ background: "#111820", border: "1px solid #26323d", borderRadius: 8, color: "#eaf2f8" }}
                 labelStyle={{ color: "#eaf2f8" }}
                 itemStyle={{ color: "#eaf2f8" }}
               />
-              <Line
-                type="monotone"
-                dataKey="value"
-                stroke={metric === "oi" ? "#1bdfa0" : "#4ab0ff"}
-                strokeWidth={2}
-                dot={false}
-                isAnimationActive={false}
-              />
+              {hasImputedPoints
+                ? segments.map((segment) => (
+                    <Line
+                      key={segment.key}
+                      data={segment.points}
+                      type="linear"
+                      dataKey="value"
+                      stroke={segment.isImputed ? "#ff5c7a" : metricStroke(metric)}
+                      strokeWidth={2}
+                      dot={false}
+                      isAnimationActive={false}
+                    />
+                  ))
+                : (
+                    <Line
+                      type="monotone"
+                      dataKey="value"
+                      stroke={metricStroke(metric)}
+                      strokeWidth={2}
+                      dot={false}
+                      isAnimationActive={false}
+                    />
+                  )}
             </LineChart>
           </ResponsiveContainer>
         )}

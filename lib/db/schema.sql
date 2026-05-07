@@ -7,6 +7,8 @@ CREATE TABLE IF NOT EXISTS oi_snapshots (
   mark_price NUMERIC,
   funding_rate NUMERIC,
   volume24h_usd NUMERIC,
+  is_imputed BOOLEAN NOT NULL DEFAULT FALSE,
+  imputed_reason TEXT,
   PRIMARY KEY (protocol, symbol, ts)
 );
 

@@ -38,9 +38,9 @@ export function PieShareChart({ data, metricLabel }: Props) {
   const topLegend = data.slice(0, 8);
 
   return (
-    <div className="grid items-center gap-6 xl:grid-cols-[minmax(20rem,0.95fr)_minmax(18rem,0.9fr)]">
-      <div className="flex min-h-80 min-w-0 items-center justify-center">
-        <div className="h-80 w-full max-w-[22rem]">
+    <div className="grid min-w-0 items-center gap-5">
+      <div className="flex min-h-72 min-w-0 items-center justify-center">
+        <div className="h-72 w-full max-w-[20rem]">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
               <Pie
@@ -65,8 +65,9 @@ export function PieShareChart({ data, metricLabel }: Props) {
         </div>
       </div>
 
-      <div className="mx-auto w-full max-w-[34rem] space-y-2">
+      <div className="mx-auto grid w-full max-w-[42rem] grid-cols-1 gap-2 sm:grid-cols-2">
         <div className="text-xs text-muted-foreground">Top share</div>
+        <div className="hidden sm:block" />
         {topLegend.map((item) => (
           <div key={item.name} className="grid grid-cols-[1fr_auto] items-center gap-3 rounded-md border bg-background/45 px-3 py-2">
             <div className="min-w-0">

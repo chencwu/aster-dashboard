@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchVolumeHistory } from "@/lib/data";
 import { isProtocolSlug } from "@/lib/protocols";
-import type { HistoryInterval } from "@/lib/types";
+import type { HistoryInterval, HistoryPoint } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +34,30 @@ function parseLimit(value: string | null, fallback: number) {
   return Math.min(Math.floor(parsed), 720);
 }
 
+function imputeInvalidVolumePoints(points: HistoryPoint[]) {
+  let previousValid: HistoryPoint | null = null;
+
+  return points.flatMap((point) => {
+    if (Number.isFinite(point.value) && point.value > 0) {
+      previousValid = { ...point, isImputed: false, imputedReason: null };
+      return [previousValid];
+    }
+
+    if (!previousValid) {
+      return [];
+    }
+
+    return [
+      {
+        ...point,
+        value: previousValid.value,
+        isImputed: true,
+        imputedReason: "volume_invalid"
+      }
+    ];
+  });
+}
+
 export async function GET(request: NextRequest, { params }: Params) {
   if (!isProtocolSlug(params.protocol)) {
     return NextResponse.json({ ok: false, error: "Unknown protocol" }, { status: 404 });
@@ -45,7 +69,10 @@ export async function GET(request: NextRequest, { params }: Params) {
   const symbol = decodeURIComponent(params.symbol);
 
   try {
-    const points = await fetchVolumeHistory(params.protocol, symbol, interval, limit);
+    const points = imputeInvalidVolumePoints(
+      await fetchVolumeHistory(params.protocol, symbol, interval, limit)
+    );
+
     return NextResponse.json({
       ok: true,
       generatedAt: Date.now(),

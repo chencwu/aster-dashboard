@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const [asterMarkets, hyperliquidMarkets] = await Promise.all([
-      getMarkets("aster"),
+      getMarkets("aster", { includeInvalidForSnapshot: true }),
       getMarkets("hyperliquid")
     ]);
 

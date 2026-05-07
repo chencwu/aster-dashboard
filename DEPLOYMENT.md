@@ -87,6 +87,12 @@ CRON_SECRET=replace_with_a_random_string_at_least_16_chars
 npm run start
 ```
 
+默认生产端口是 `3001`。如果要临时覆盖：
+
+```bash
+PORT=3002 npm run start
+```
+
 用 PM2 守护：
 
 ```bash
@@ -105,7 +111,7 @@ crontab -e
 添加：
 
 ```cron
-*/5 * * * * curl -fsS -H "Authorization: Bearer YOUR_CRON_SECRET" http://127.0.0.1:3000/api/cron/snapshot-oi >> /var/log/aster-oi-cron.log 2>&1
+*/5 * * * * curl -fsS -H "Authorization: Bearer YOUR_CRON_SECRET" http://127.0.0.1:3001/api/cron/snapshot-oi >> /var/log/aster-oi-cron.log 2>&1
 ```
 
-如果要绑定域名，使用 Nginx 反代到 `http://127.0.0.1:3000`，再用 Certbot 配 HTTPS。
+如果要绑定域名，使用 Nginx 反代到 `http://127.0.0.1:3001`，再用 Certbot 配 HTTPS。

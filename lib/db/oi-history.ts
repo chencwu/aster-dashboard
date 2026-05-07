@@ -100,6 +100,14 @@ function maxSnapshotStalenessHours(hoursAgo: number) {
   return 12;
 }
 
+function valueDelta(current: number, previous: number | null | undefined) {
+  if (!Number.isFinite(current) || previous == null || !Number.isFinite(previous)) {
+    return null;
+  }
+
+  return current - previous;
+}
+
 export async function getOiHistory(
   protocol: ProtocolSlug,
   symbol: string,
@@ -319,12 +327,18 @@ export async function attachOiDeltas(markets: Market[]) {
       oiDelta1hPct: delta?.oi1h == null ? null : pctChange(market.oi, delta.oi1h),
       oiDelta24hPct: delta?.oi24h == null ? null : pctChange(market.oi, delta.oi24h),
       oiDelta7dPct: delta?.oi7d == null ? null : pctChange(market.oi, delta.oi7d),
+      oiDelta1hUsd: valueDelta(market.oi, delta?.oi1h),
+      oiDelta24hUsd: valueDelta(market.oi, delta?.oi24h),
+      oiDelta7dUsd: valueDelta(market.oi, delta?.oi7d),
       volumeDelta1hPct:
         delta?.volume1h == null ? null : pctChange(market.volume24h, delta.volume1h),
       volumeDelta24hPct:
         delta?.volume24h == null ? null : pctChange(market.volume24h, delta.volume24h),
       volumeDelta7dPct:
-        delta?.volume7d == null ? null : pctChange(market.volume24h, delta.volume7d)
+        delta?.volume7d == null ? null : pctChange(market.volume24h, delta.volume7d),
+      volumeDelta1hUsd: valueDelta(market.volume24h, delta?.volume1h),
+      volumeDelta24hUsd: valueDelta(market.volume24h, delta?.volume24h),
+      volumeDelta7dUsd: valueDelta(market.volume24h, delta?.volume7d)
     };
   });
 }

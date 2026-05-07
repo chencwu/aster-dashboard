@@ -8,6 +8,8 @@ import type {
   DashboardStats,
   DeltaLeaderboardItem,
   DeltaPeriod,
+  DeltaScope,
+  DeltaSortMode,
   HistoryInterval,
   HistoryPoint,
   Market,
@@ -15,6 +17,7 @@ import type {
   Protocol,
   ProtocolSlug
 } from "@/lib/types";
+import { attachMarketData } from "@/lib/sources/market-data";
 import {
   attachOiDeltas,
   getProtocolOiAtOrBefore,
@@ -44,7 +47,7 @@ export async function getMarkets(
 
 export async function getMarketsWithOiDeltas(protocol: ProtocolSlug) {
   const markets = await getMarkets(protocol);
-  return attachOiDeltas(markets);
+  return attachOiDeltas(await attachMarketData(markets));
 }
 
 export async function getAllMarkets() {
@@ -132,24 +135,61 @@ function pickOiDelta(market: Market, period: DeltaPeriod) {
   return market.oiDelta7dPct;
 }
 
-export function getOiDeltaLeaderboardFromMarkets(markets: Market[], period: DeltaPeriod) {
-  return markets
-    .map(
-      (market): DeltaLeaderboardItem => ({
-        protocol: market.protocol,
-        symbol: market.symbol,
-        rawSymbol: market.rawSymbol,
-        value: market.oi,
-        deltaPct: pickOiDelta(market, period),
-        markPrice: market.markPrice
-      })
-    )
-    .filter((item) => item.deltaPct != null)
-    .sort((left, right) => (right.deltaPct ?? -Infinity) - (left.deltaPct ?? -Infinity))
+function pickVolumeDeltaUsd(market: Market, period: DeltaPeriod) {
+  if (period === "1h") return market.volumeDelta1hUsd;
+  if (period === "24h") return market.volumeDelta24hUsd;
+  return market.volumeDelta7dUsd;
+}
+
+function pickOiDeltaUsd(market: Market, period: DeltaPeriod) {
+  if (period === "1h") return market.oiDelta1hUsd;
+  if (period === "24h") return market.oiDelta24hUsd;
+  return market.oiDelta7dUsd;
+}
+
+function sortDeltaItems(items: DeltaLeaderboardItem[], mode: DeltaSortMode) {
+  const pick = mode === "amount"
+    ? (item: DeltaLeaderboardItem) => item.deltaUsd
+    : (item: DeltaLeaderboardItem) => item.deltaPct;
+
+  return items
+    .filter((item) => pick(item) != null)
+    .sort((left, right) => (pick(right) ?? -Infinity) - (pick(left) ?? -Infinity))
     .slice(0, 30);
 }
 
-export async function getOiDeltaLeaderboard(period: DeltaPeriod) {
+function filterMarketsByScope(markets: Market[], scope: DeltaScope) {
+  if (scope === "all") return markets;
+  return markets.filter((market) => market.protocol === scope);
+}
+
+export function getOiDeltaLeaderboardFromMarkets(
+  markets: Market[],
+  period: DeltaPeriod,
+  mode: DeltaSortMode = "pct",
+  scope: DeltaScope = "all"
+) {
+  const items = filterMarketsByScope(markets, scope).map(
+    (market): DeltaLeaderboardItem => ({
+      protocol: market.protocol,
+      symbol: market.symbol,
+      rawSymbol: market.rawSymbol,
+      value: market.oi,
+      deltaPct: pickOiDelta(market, period),
+      deltaUsd: pickOiDeltaUsd(market, period),
+      priceChange24hPct: market.change24hPct,
+      markPrice: market.markPrice
+    })
+  );
+
+  return sortDeltaItems(items, mode);
+}
+
+export async function getOiDeltaLeaderboard(
+  period: DeltaPeriod,
+  mode: DeltaSortMode = "pct",
+  scope: DeltaScope = "all"
+) {
   if (!isPostgresConfigured()) return [];
 
   const [aster, hyperliquid] = await Promise.all([
@@ -157,7 +197,7 @@ export async function getOiDeltaLeaderboard(period: DeltaPeriod) {
     getMarketsWithOiDeltas("hyperliquid")
   ]);
 
-  return getOiDeltaLeaderboardFromMarkets([...aster, ...hyperliquid], period);
+  return getOiDeltaLeaderboardFromMarkets([...aster, ...hyperliquid], period, mode, scope);
 }
 
 function splitWindow(points: HistoryPoint[], period: DeltaPeriod) {
@@ -190,20 +230,28 @@ async function volumeDeltaForMarket(
     rawSymbol: market.rawSymbol,
     value: current || market.volume24h,
     deltaPct: pctChange(current, previous),
+    deltaUsd:
+      Number.isFinite(current) && Number.isFinite(previous) ? current - previous : null,
+    priceChange24hPct: market.change24hPct,
     markPrice: market.markPrice
   };
 }
 
-export async function getVolumeDeltaLeaderboard(period: DeltaPeriod) {
+export async function getVolumeDeltaLeaderboard(
+  period: DeltaPeriod,
+  mode: DeltaSortMode = "pct",
+  scope: DeltaScope = "all"
+) {
   const { aster, hyperliquid } = await getAllMarkets();
   const markets = [...aster, ...hyperliquid].filter((market) => market.volume24h > 0);
 
   if (isPostgresConfigured()) {
     const marketsWithDeltas = await attachOiDeltas(markets);
-    return getVolumeDeltaLeaderboardFromMarkets(marketsWithDeltas, period);
+    return getVolumeDeltaLeaderboardFromMarkets(marketsWithDeltas, period, mode, scope);
   }
 
   const sampledMarkets = [...markets]
+    .filter((market) => scope === "all" || market.protocol === scope)
     .sort((left, right) => right.volume24h - left.volume24h)
     .slice(0, 80);
   const items = await mapLimit(sampledMarkets, 6, async (market) => {
@@ -214,14 +262,19 @@ export async function getVolumeDeltaLeaderboard(period: DeltaPeriod) {
     }
   });
 
-  return items
-    .filter((item): item is DeltaLeaderboardItem => item !== null && item.deltaPct != null)
-    .sort((left, right) => (right.deltaPct ?? -Infinity) - (left.deltaPct ?? -Infinity))
-    .slice(0, 30);
+  return sortDeltaItems(
+    items.filter((item): item is DeltaLeaderboardItem => item !== null),
+    mode
+  );
 }
 
-export function getVolumeDeltaLeaderboardFromMarkets(markets: Market[], period: DeltaPeriod) {
-  return markets
+export function getVolumeDeltaLeaderboardFromMarkets(
+  markets: Market[],
+  period: DeltaPeriod,
+  mode: DeltaSortMode = "pct",
+  scope: DeltaScope = "all"
+) {
+  const items = filterMarketsByScope(markets, scope)
     .filter((market) => market.volume24h > 0)
     .map(
       (market): DeltaLeaderboardItem => ({
@@ -230,12 +283,13 @@ export function getVolumeDeltaLeaderboardFromMarkets(markets: Market[], period: 
         rawSymbol: market.rawSymbol,
         value: market.volume24h,
         deltaPct: pickVolumeDelta(market, period),
+        deltaUsd: pickVolumeDeltaUsd(market, period),
+        priceChange24hPct: market.change24hPct,
         markPrice: market.markPrice
       })
-    )
-    .filter((item) => item.deltaPct != null)
-    .sort((left, right) => (right.deltaPct ?? -Infinity) - (left.deltaPct ?? -Infinity))
-    .slice(0, 30);
+    );
+
+  return sortDeltaItems(items, mode);
 }
 
 function countKnown(markets: Market[], pick: (market: Market) => number | null) {

@@ -27,16 +27,24 @@ export type Market = {
   symbol: string;
   rawSymbol: string;
   markPrice: number;
+  marketCap: number | null;
+  fdv: number | null;
   change24hPct: number;
   oiBase: number;
   oi: number;
   oiDelta1hPct: number | null;
   oiDelta24hPct: number | null;
   oiDelta7dPct: number | null;
+  oiDelta1hUsd: number | null;
+  oiDelta24hUsd: number | null;
+  oiDelta7dUsd: number | null;
   volume24h: number;
   volumeDelta1hPct: number | null;
   volumeDelta24hPct: number | null;
   volumeDelta7dPct: number | null;
+  volumeDelta1hUsd: number | null;
+  volumeDelta24hUsd: number | null;
+  volumeDelta7dUsd: number | null;
   fundingRate: number;
 };
 
@@ -63,6 +71,10 @@ export type SymbolCompare = {
 
 export type DeltaPeriod = "1h" | "24h" | "7d";
 
+export type DeltaSortMode = "pct" | "amount";
+
+export type DeltaScope = "all" | ProtocolSlug;
+
 export type MarketsQuality = {
   deltaSource: "postgres_snapshots" | "not_configured";
   marketCount: number;
@@ -77,6 +89,8 @@ export type DeltaLeaderboardItem = {
   rawSymbol: string;
   value: number;
   deltaPct: number | null;
+  deltaUsd: number | null;
+  priceChange24hPct: number;
   markPrice?: number;
 };
 

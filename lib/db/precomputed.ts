@@ -6,12 +6,18 @@ export type PrecomputedKey =
   | "protocols"
   | "markets:aster"
   | "markets:hyperliquid"
-  | "delta:oi:1h"
-  | "delta:oi:24h"
-  | "delta:oi:7d"
-  | "delta:volume:1h"
-  | "delta:volume:24h"
-  | "delta:volume:7d";
+  | "delta:oi:1h:pct"
+  | "delta:oi:24h:pct"
+  | "delta:oi:7d:pct"
+  | "delta:oi:1h:amount"
+  | "delta:oi:24h:amount"
+  | "delta:oi:7d:amount"
+  | "delta:volume:1h:pct"
+  | "delta:volume:24h:pct"
+  | "delta:volume:7d:pct"
+  | "delta:volume:1h:amount"
+  | "delta:volume:24h:amount"
+  | "delta:volume:7d:amount";
 
 type PrecomputedPayloadRow = {
   payload: unknown;

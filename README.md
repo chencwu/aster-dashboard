@@ -71,17 +71,17 @@
 
 选定一个 Symbol（如 BTC），并排展示 Aster vs Hyperliquid：
 - 当前 OI / Volume / Funding / Mark Price 差值
-- **OI 历史曲线**（多时间档 1H / 4H / 1D / 7D / 30D）
+- **OI 历史曲线**（多时间档 1H / 12H / 1D / 3D / 7D）
 - **Volume 历史曲线**（同上）
 
 #### 4.4 OI / Volume 增长追踪（核心）
 
 | 视图 | 内容 |
 |---|---|
-| OI 历史曲线 | 每个币种支持 1H / 4H / 1D / 7D / 30D 多时间档 OI 走势 |
+| OI 历史曲线 | 每个币种支持 1H / 12H / 1D / 3D / 7D 多时间档 OI 走势 |
 | Volume 历史曲线 | 每个币种相同时间档 Volume 走势 |
-| OI Δ 排行榜 | 按 1h / 24h / 7d 三档 OI 增长率倒序，找出"正在被堆仓"的币种 |
-| Volume Δ 排行榜 | 按 1h / 24h / 7d 三档 Volume 增长率倒序，找出"突然爆量"的币种 |
+| OI Δ 排行榜 | 按 1h / 24h / 7d 三档 OI 增长率或增加量 U 倒序，找出"正在被堆仓"的币种 |
+| Volume Δ 排行榜 | 按 1h / 24h / 7d 三档 Volume 增长率或增加量 U 倒序，找出"突然爆量"的币种 |
 | 异动提示 | OI 24h Δ > +50% 或 < -30%、Volume 24h Δ > +200% 时高亮 |
 
 ### 5. 不做的功能（已确认排除）
@@ -222,10 +222,16 @@ type Market = {
   oiDelta1hPct: number | null; // null = 数据未累积足够
   oiDelta24hPct: number | null;
   oiDelta7dPct: number | null;
+  oiDelta1hUsd: number | null;
+  oiDelta24hUsd: number | null;
+  oiDelta7dUsd: number | null;
   volume24h: number;           // USD
   volumeDelta1hPct: number;
   volumeDelta24hPct: number;
   volumeDelta7dPct: number;
+  volumeDelta1hUsd: number | null;
+  volumeDelta24hUsd: number | null;
+  volumeDelta7dUsd: number | null;
   fundingRate: number;
 };
 
@@ -264,7 +270,7 @@ CREATE TABLE oi_snapshots (
 CREATE INDEX idx_oi_snapshots_lookup ON oi_snapshots (protocol, symbol, ts DESC);
 
 CREATE TABLE precomputed_payloads (
-  key TEXT PRIMARY KEY,              -- stats / protocols / markets:aster / delta:oi:24h 等
+  key TEXT PRIMARY KEY,              -- stats / protocols / markets:aster / delta:oi:24h:pct / delta:oi:24h:amount 等
   generated_at TIMESTAMPTZ NOT NULL,
   payload JSONB NOT NULL             -- 前端 API 直接返回的 JSON payload
 );
@@ -287,7 +293,7 @@ CREATE TABLE precomputed_payloads (
    - 建 Vercel Postgres，跑 `schema.sql`
    - 写 `/api/cron/snapshot-oi/route.ts`，同一次任务并发抓两家
    - `vercel.json` 配置 `*/5 * * * *` cron
-9. **预计算读模型** — Cron 写完快照后计算 stats/protocols/markets/delta 并写入 `precomputed_payloads`
+9. **预计算读模型** — Cron 写完快照后计算 stats/protocols/markets/delta，delta 同时预计算百分比与增加量 U，并写入 `precomputed_payloads`
 10. **Tracker 子页** — OI/Volume 异动榜 + 历史曲线 + 表格 Δ 列（Δ 优先读预计算 payload）
 11. **轮询 + 错误态 + Loading 骨架屏**
 12. **Vercel 部署**

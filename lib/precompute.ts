@@ -8,7 +8,7 @@ import {
 } from "@/lib/data";
 import { attachOiDeltas } from "@/lib/db/oi-history";
 import { setPrecomputedPayloads, type PrecomputedKey } from "@/lib/db/precomputed";
-import type { DeltaPeriod, Market, ProtocolSlug } from "@/lib/types";
+import type { DeltaPeriod, DeltaSortMode, Market, ProtocolSlug } from "@/lib/types";
 
 type RefreshInput = {
   asterMarkets?: Market[];
@@ -16,6 +16,7 @@ type RefreshInput = {
 };
 
 const periods: DeltaPeriod[] = ["1h", "24h", "7d"];
+const deltaSortModes: DeltaSortMode[] = ["pct", "amount"];
 
 function isDisplayableMarket(protocol: ProtocolSlug, market: Market) {
   if (protocol !== "aster") return true;
@@ -23,8 +24,12 @@ function isDisplayableMarket(protocol: ProtocolSlug, market: Market) {
   return market.oi > 0 && market.oiBase > 0 && market.markPrice > 0;
 }
 
-function keyForDelta(metric: "oi" | "volume", period: DeltaPeriod): PrecomputedKey {
-  return `delta:${metric}:${period}` as PrecomputedKey;
+function keyForDelta(
+  metric: "oi" | "volume",
+  period: DeltaPeriod,
+  mode: DeltaSortMode
+): PrecomputedKey {
+  return `delta:${metric}:${period}:${mode}` as PrecomputedKey;
 }
 
 export async function refreshPrecomputedPayloads(input: RefreshInput = {}) {
@@ -80,35 +85,39 @@ export async function refreshPrecomputedPayloads(input: RefreshInput = {}) {
         quality: getMarketsQuality(hyperliquid)
       }
     },
-    ...periods.flatMap((period) => {
-      const oiItems = getOiDeltaLeaderboardFromMarkets(allMarkets, period);
-      const volumeItems = getVolumeDeltaLeaderboardFromMarkets(allMarkets, period);
+    ...periods.flatMap((period) =>
+      deltaSortModes.flatMap((mode) => {
+        const oiItems = getOiDeltaLeaderboardFromMarkets(allMarkets, period, mode);
+        const volumeItems = getVolumeDeltaLeaderboardFromMarkets(allMarkets, period, mode);
 
-      return [
-        {
-          key: keyForDelta("oi", period),
-          payload: {
-            ok: true,
-            generatedAt,
-            metric: "oi",
-            period,
-            status: oiItems.length ? "ready" : "insufficient_history",
-            items: oiItems
+        return [
+          {
+            key: keyForDelta("oi", period, mode),
+            payload: {
+              ok: true,
+              generatedAt,
+              metric: "oi",
+              period,
+              mode,
+              status: oiItems.length ? "ready" : "insufficient_history",
+              items: oiItems
+            }
+          },
+          {
+            key: keyForDelta("volume", period, mode),
+            payload: {
+              ok: true,
+              generatedAt,
+              metric: "volume",
+              period,
+              mode,
+              status: volumeItems.length ? "ready" : "insufficient_history",
+              items: volumeItems
+            }
           }
-        },
-        {
-          key: keyForDelta("volume", period),
-          payload: {
-            ok: true,
-            generatedAt,
-            metric: "volume",
-            period,
-            status: volumeItems.length ? "ready" : "insufficient_history",
-            items: volumeItems
-          }
-        }
-      ];
-    })
+        ];
+      })
+    )
   ];
 
   const written = await setPrecomputedPayloads(payloads);

@@ -83,12 +83,12 @@ function TrackerContent() {
         <DeltaLeaderboard
           metric="oi"
           title="OI Δ 排行榜"
-          description="按 1h / 24h / 7d OI 增长率寻找正在被堆仓的币种"
+          description="按 1h / 24h / 7d OI 增长率或增加量寻找正在被堆仓的币种"
         />
         <DeltaLeaderboard
           metric="volume"
           title="Volume Δ 排行榜"
-          description="按 24h 成交额快照变化率寻找突然爆量的币种"
+          description="按 24h 成交额快照变化率或增加量寻找突然爆量的币种"
         />
       </section>
 

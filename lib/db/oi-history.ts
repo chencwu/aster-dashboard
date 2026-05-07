@@ -275,7 +275,6 @@ function prepareSnapshotRows(
       !isPositiveFinite(market.oi) ||
       !isPositiveFinite(market.oiBase) ||
       !isPositiveFinite(market.markPrice);
-    const invalidVolume = !isPositiveFinite(market.volume24h);
     const reasons: string[] = [];
 
     if (invalidOi) {
@@ -291,14 +290,6 @@ function prepareSnapshotRows(
       reasons.push("oi_or_mark_price_invalid");
     }
 
-    if (invalidVolume) {
-      if (!previous || !isPositiveFinite(previous.volume24h)) {
-        return [];
-      }
-
-      reasons.push("volume_invalid");
-    }
-
     return [
       {
         symbol: market.symbol,
@@ -308,7 +299,7 @@ function prepareSnapshotRows(
         funding_rate: Number.isFinite(market.fundingRate)
           ? market.fundingRate
           : previous?.fundingRate ?? 0,
-        volume24h_usd: invalidVolume ? previous!.volume24h : market.volume24h,
+        volume24h_usd: Number.isFinite(market.volume24h) ? market.volume24h : 0,
         is_imputed: reasons.length > 0,
         imputed_reason: reasons.length ? reasons.join(",") : null
       }

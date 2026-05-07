@@ -99,9 +99,7 @@ export async function fetchAsterMarkets(options: FetchAsterMarketsOptions = {}):
 
     const premiums = Array.isArray(premiumResponse) ? premiumResponse : [premiumResponse];
     const premiumBySymbol = new Map(premiums.map((item) => [item.symbol, item]));
-    const usdtTickers = tickers
-      .filter((ticker) => ticker.symbol.endsWith("USDT"))
-      .filter((ticker) => includeInvalidForSnapshot || toNumber(ticker.quoteVolume) > 0);
+    const usdtTickers = tickers.filter((ticker) => ticker.symbol.endsWith("USDT"));
 
     const markets = await mapLimit(usdtTickers, 16, async (ticker): Promise<Market | null> => {
       const rawSymbol = ticker.symbol;
@@ -114,7 +112,7 @@ export async function fetchAsterMarkets(options: FetchAsterMarketsOptions = {}):
 
       if (
         !includeInvalidForSnapshot &&
-        (openInterestBase == null || oiBase <= 0 || markPrice <= 0 || volume24h <= 0)
+        (openInterestBase == null || oiBase <= 0 || markPrice <= 0)
       ) {
         return null;
       }

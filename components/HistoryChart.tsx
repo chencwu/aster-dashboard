@@ -18,7 +18,7 @@ import { fetchJson } from "@/lib/client-fetch";
 import { formatUsd } from "@/lib/format";
 import type { HistoryPoint, ProtocolSlug } from "@/lib/types";
 
-type Range = "5min" | "15min" | "30min" | "1h" | "4h" | "8h" | "1d" | "3d" | "7d";
+type Range = "1h" | "12h" | "1d" | "3d" | "7d";
 
 type HistoryResponse = {
   ok: true;
@@ -33,15 +33,17 @@ type Props = {
   metric: "oi" | "volume";
 };
 
-const ranges: Range[] = ["5min", "15min", "30min", "1h", "4h", "8h", "1d", "3d", "7d"];
+const ranges: Array<{ value: Range; label: string }> = [
+  { value: "1h", label: "1H" },
+  { value: "12h", label: "12H" },
+  { value: "1d", label: "1D" },
+  { value: "3d", label: "3D" },
+  { value: "7d", label: "7D" }
+];
 
 function volumeParams(range: Range) {
-  if (range === "5min") return { interval: "1m", limit: 6 };
-  if (range === "15min") return { interval: "1m", limit: 16 };
-  if (range === "30min") return { interval: "5m", limit: 7 };
   if (range === "1h") return { interval: "5m", limit: 13 };
-  if (range === "4h") return { interval: "15m", limit: 17 };
-  if (range === "8h") return { interval: "30m", limit: 17 };
+  if (range === "12h") return { interval: "30m", limit: 25 };
   if (range === "1d") return { interval: "1h", limit: 25 };
   if (range === "3d") return { interval: "4h", limit: 19 };
   return { interval: "4h", limit: 43 };
@@ -109,12 +111,12 @@ export function HistoryChart({ title, protocol, symbol, metric }: Props) {
           <div className="flex flex-wrap gap-2">
             {ranges.map((item) => (
               <Button
-                key={item}
+                key={item.value}
                 size="sm"
-                variant={range === item ? "default" : "secondary"}
-                onClick={() => setRange(item)}
+                variant={range === item.value ? "default" : "secondary"}
+                onClick={() => setRange(item.value)}
               >
-                {item}
+                {item.label}
               </Button>
             ))}
           </div>

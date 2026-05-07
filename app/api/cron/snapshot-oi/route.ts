@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getMarkets } from "@/lib/data";
 import { insertOiSnapshots, isPostgresConfigured } from "@/lib/db/oi-history";
+import { refreshPrecomputedPayloads } from "@/lib/precompute";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -32,6 +33,10 @@ export async function GET(request: NextRequest) {
       insertOiSnapshots("aster", asterMarkets),
       insertOiSnapshots("hyperliquid", hyperliquidMarkets)
     ]);
+    const precomputed = await refreshPrecomputedPayloads({
+      asterMarkets,
+      hyperliquidMarkets
+    });
 
     return NextResponse.json({
       ok: true,
@@ -43,7 +48,8 @@ export async function GET(request: NextRequest) {
       symbols: {
         aster: asterMarkets.length,
         hyperliquid: hyperliquidMarkets.length
-      }
+      },
+      precomputed
     });
   } catch (error) {
     return NextResponse.json(

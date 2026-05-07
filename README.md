@@ -113,9 +113,10 @@
 
 | | Volume | OI |
 |---|---|---|
-| 数据来源 | K-line API 直接查询，可任意回溯 | Cron + Postgres 自采 |
-| 是否能回填历史 | ✅ 可以 | ❌ 不能（API 不提供） |
-| 7D 曲线启动 | 立即可用 | 需自然累积 7 天 |
+| 单币种历史曲线 | K-line API 直接查询，可任意回溯 | Cron + Postgres 自采 |
+| 平台 7D / Δ 排行 | 优先用 Cron 落库的 `volume24h_usd` 快照，避免全市场逐币种拉 K 线 | Cron + Postgres 自采 |
+| 是否能回填历史 | 单币种 Volume ✅；平台快照序列 ❌ | ❌（API 不提供） |
+| 7D 曲线启动 | 单币种 Volume 立即可用；平台快照需累积 | 需自然累积 7 天 |
 
 ---
 
@@ -128,8 +129,8 @@
 | 图表 | Recharts |
 | 数据请求 | TanStack Query（轮询 + 缓存） |
 | 数字格式化 | numeral.js |
-| OI 历史存储 | Vercel Postgres (Neon) |
-| 定时任务 | Vercel Cron（每 5 分钟写一次 OI 快照） |
+| OI 历史与读模型存储 | Vercel Postgres (Neon) |
+| 定时任务 | Vercel Cron（每 5 分钟写 OI 快照并预计算前端 payload） |
 | 部署 | Vercel |
 
 ---
@@ -138,9 +139,10 @@
 
 | 数据 | 刷新间隔 |
 |---|---|
-| 实时 OI / Volume / Funding / Price（前端轮询） | 60 秒 |
-| OI 快照写库（Cron） | 5 分钟 |
-| Volume 历史 K 线 | 5 分钟（按需查询，TanStack Query 缓存） |
+| 前端读取预计算 payload | 60 秒轮询，后端计算不依赖前端请求 |
+| OI 快照写库 + stats/protocols/markets/delta 预计算（Cron） | 5 分钟 |
+| 单币种 Volume 历史 K 线 | 5 分钟（按需查询，TanStack Query 缓存） |
+| 平台 Volume 走势 / Δ 排行 | 5 分钟（优先使用 Cron 快照） |
 
 ---
 
@@ -163,7 +165,7 @@ app/
    ├─ history/volume/[protocol]/[symbol]/route.ts    单币种 Volume 历史（查 K-line）
    ├─ delta/oi/route.ts                    OI Δ 排行（1h/24h/7d）
    ├─ delta/volume/route.ts                Volume Δ 排行
-   └─ cron/snapshot-oi/route.ts            每 5min 同时为两家写 OI 快照
+   └─ cron/snapshot-oi/route.ts            每 5min 写 OI 快照并生成预计算 payload
 
 components/
 ├─ StatCard.tsx
@@ -184,7 +186,7 @@ lib/
 │  ├─ hyperliquid.ts            实时取数 + K 线（Volume 历史）
 │  └─ aster.ts                  实时取数 + K 线（Volume 历史）
 ├─ db/
-│  ├─ schema.sql                oi_snapshots 表
+│  ├─ schema.sql                oi_snapshots + precomputed_payloads 表
 │  └─ oi-history.ts             查询历史 OI、计算 Δ
 ├─ symbols.ts                   币种归一化（BTCUSDT ↔ BTC）
 ├─ format.ts
@@ -205,7 +207,7 @@ type Protocol = {
   oi7d: number[];              // 7D 序列（来自 Postgres 聚合）
   oiDelta24hPct: number;
   volume24h: number;           // USD
-  volume7d: number[];          // 来自 K 线
+  volume7d: number[];          // 来自 Postgres 的 24h Volume 快照聚合
   volumeDelta24hPct: number;
   symbolCount: number;
 };
@@ -221,6 +223,7 @@ type Market = {
   oiDelta24hPct: number | null;
   oiDelta7dPct: number | null;
   volume24h: number;           // USD
+  volumeDelta1hPct: number;
   volumeDelta24hPct: number;
   volumeDelta7dPct: number;
   fundingRate: number;
@@ -259,9 +262,15 @@ CREATE TABLE oi_snapshots (
   PRIMARY KEY (protocol, symbol, ts)
 );
 CREATE INDEX idx_oi_snapshots_lookup ON oi_snapshots (protocol, symbol, ts DESC);
+
+CREATE TABLE precomputed_payloads (
+  key TEXT PRIMARY KEY,              -- stats / protocols / markets:aster / delta:oi:24h 等
+  generated_at TIMESTAMPTZ NOT NULL,
+  payload JSONB NOT NULL             -- 前端 API 直接返回的 JSON payload
+);
 ```
 
-每 5min 一次写入，单 symbol 一年 ~10.5w 行，两家 200 个 symbol 总量约 4200w 行/年——可控，必要时按月分区。
+每 5min 一次写入原始快照，随后生成预计算 payload。前端接口优先读取 `precomputed_payloads`，没有预计算结果时才临时走旧计算兜底。
 
 ---
 
@@ -278,9 +287,10 @@ CREATE INDEX idx_oi_snapshots_lookup ON oi_snapshots (protocol, symbol, ts DESC)
    - 建 Vercel Postgres，跑 `schema.sql`
    - 写 `/api/cron/snapshot-oi/route.ts`，同一次任务并发抓两家
    - `vercel.json` 配置 `*/5 * * * *` cron
-9. **Tracker 子页** — OI/Volume 异动榜 + 历史曲线 + 表格 Δ 列
-10. **轮询 + 错误态 + Loading 骨架屏**
-11. **Vercel 部署**
+9. **预计算读模型** — Cron 写完快照后计算 stats/protocols/markets/delta 并写入 `precomputed_payloads`
+10. **Tracker 子页** — OI/Volume 异动榜 + 历史曲线 + 表格 Δ 列（Δ 优先读预计算 payload）
+11. **轮询 + 错误态 + Loading 骨架屏**
+12. **Vercel 部署**
 
 > OI 历史**无法回填**，部署后前 7 天 OI 7D 曲线/Δ 会逐日补全，前端用 `null` 加"已采集 N 小时"提示降级显示。
 

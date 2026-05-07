@@ -76,6 +76,7 @@ export async function fetchHyperliquidMarkets(): Promise<Market[]> {
           oiDelta24hPct: null,
           oiDelta7dPct: null,
           volume24h,
+          volumeDelta1hPct: null,
           volumeDelta24hPct: null,
           volumeDelta7dPct: null,
           fundingRate

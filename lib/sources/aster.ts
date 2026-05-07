@@ -57,10 +57,14 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function fetchOpenInterest(rawSymbol: string): Promise<number | null> {
+async function fetchOpenInterest(
+  rawSymbol: string,
+  options: { retryInvalid?: boolean } = {}
+): Promise<number | null> {
+  const retryDelays = options.retryInvalid ? OPEN_INTEREST_RETRY_DELAYS_MS : [];
   let lastValue: number | null = null;
 
-  for (let attempt = 0; attempt <= OPEN_INTEREST_RETRY_DELAYS_MS.length; attempt += 1) {
+  for (let attempt = 0; attempt <= retryDelays.length; attempt += 1) {
     try {
       const data = await getJson<AsterOpenInterest>(
         `/openInterest?symbol=${encodeURIComponent(rawSymbol)}`
@@ -70,7 +74,7 @@ async function fetchOpenInterest(rawSymbol: string): Promise<number | null> {
       if (Number.isFinite(value)) {
         lastValue = value;
 
-        if (value > 0) {
+        if (value > 0 || !options.retryInvalid) {
           return value;
         }
       }
@@ -78,7 +82,7 @@ async function fetchOpenInterest(rawSymbol: string): Promise<number | null> {
       lastValue = null;
     }
 
-    const delay = OPEN_INTEREST_RETRY_DELAYS_MS[attempt];
+    const delay = retryDelays[attempt];
     if (delay) {
       await sleep(delay);
     }
@@ -101,39 +105,47 @@ export async function fetchAsterMarkets(options: FetchAsterMarketsOptions = {}):
     const premiumBySymbol = new Map(premiums.map((item) => [item.symbol, item]));
     const usdtTickers = tickers.filter((ticker) => ticker.symbol.endsWith("USDT"));
 
-    const markets = await mapLimit(usdtTickers, 16, async (ticker): Promise<Market | null> => {
-      const rawSymbol = ticker.symbol;
-      const premium = premiumBySymbol.get(rawSymbol);
-      const markPrice = toNumber(premium?.markPrice, toNumber(ticker.lastPrice));
-      const openInterestBase = await fetchOpenInterest(rawSymbol);
-      const oiBase = openInterestBase ?? 0;
-      const volume24h = toNumber(ticker.quoteVolume);
-      const oi = markPrice > 0 && oiBase > 0 ? oiBase * markPrice : 0;
+    const openInterestConcurrency = includeInvalidForSnapshot ? 16 : 48;
+    const markets = await mapLimit(
+      usdtTickers,
+      openInterestConcurrency,
+      async (ticker): Promise<Market | null> => {
+        const rawSymbol = ticker.symbol;
+        const premium = premiumBySymbol.get(rawSymbol);
+        const markPrice = toNumber(premium?.markPrice, toNumber(ticker.lastPrice));
+        const openInterestBase = await fetchOpenInterest(rawSymbol, {
+          retryInvalid: includeInvalidForSnapshot
+        });
+        const oiBase = openInterestBase ?? 0;
+        const volume24h = toNumber(ticker.quoteVolume);
+        const oi = markPrice > 0 && oiBase > 0 ? oiBase * markPrice : 0;
 
-      if (
-        !includeInvalidForSnapshot &&
-        (openInterestBase == null || oiBase <= 0 || markPrice <= 0)
-      ) {
-        return null;
+        if (
+          !includeInvalidForSnapshot &&
+          (openInterestBase == null || oiBase <= 0 || markPrice <= 0)
+        ) {
+          return null;
+        }
+
+        return {
+          protocol: "aster",
+          symbol: normalizeAsterSymbol(rawSymbol),
+          rawSymbol,
+          markPrice,
+          change24hPct: toNumber(ticker.priceChangePercent),
+          oiBase,
+          oi,
+          oiDelta1hPct: null,
+          oiDelta24hPct: null,
+          oiDelta7dPct: null,
+          volume24h,
+          volumeDelta1hPct: null,
+          volumeDelta24hPct: null,
+          volumeDelta7dPct: null,
+          fundingRate: toNumber(premium?.lastFundingRate)
+        };
       }
-
-      return {
-        protocol: "aster",
-        symbol: normalizeAsterSymbol(rawSymbol),
-        rawSymbol,
-        markPrice,
-        change24hPct: toNumber(ticker.priceChangePercent),
-        oiBase,
-        oi,
-        oiDelta1hPct: null,
-        oiDelta24hPct: null,
-        oiDelta7dPct: null,
-        volume24h,
-        volumeDelta24hPct: null,
-        volumeDelta7dPct: null,
-        fundingRate: toNumber(premium?.lastFundingRate)
-      };
-    });
+    );
 
     return markets
       .filter((market): market is Market => Boolean(market))

@@ -14,3 +14,15 @@ CREATE TABLE IF NOT EXISTS oi_snapshots (
 
 CREATE INDEX IF NOT EXISTS idx_oi_snapshots_lookup
   ON oi_snapshots (protocol, symbol, ts DESC);
+
+CREATE INDEX IF NOT EXISTS idx_oi_snapshots_protocol_ts
+  ON oi_snapshots (protocol, ts DESC);
+
+CREATE TABLE IF NOT EXISTS precomputed_payloads (
+  key TEXT PRIMARY KEY,
+  generated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  payload JSONB NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_precomputed_payloads_generated_at
+  ON precomputed_payloads (generated_at DESC);

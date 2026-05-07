@@ -34,6 +34,7 @@ export type Market = {
   oiDelta24hPct: number | null;
   oiDelta7dPct: number | null;
   volume24h: number;
+  volumeDelta1hPct: number | null;
   volumeDelta24hPct: number | null;
   volumeDelta7dPct: number | null;
   fundingRate: number;
@@ -61,6 +62,14 @@ export type SymbolCompare = {
 };
 
 export type DeltaPeriod = "1h" | "24h" | "7d";
+
+export type MarketsQuality = {
+  deltaSource: "postgres_snapshots" | "not_configured";
+  marketCount: number;
+  maxSnapshotStalenessHours: Record<DeltaPeriod, number>;
+  oiDeltaCoverage: Record<DeltaPeriod, number>;
+  volumeDeltaCoverage: Record<DeltaPeriod, number>;
+};
 
 export type DeltaLeaderboardItem = {
   protocol: ProtocolSlug;

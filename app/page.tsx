@@ -102,7 +102,7 @@ export default function DashboardPage() {
       <Card>
         <CardHeader>
           <CardTitle>平台明细</CardTitle>
-          <CardDescription>7D OI 需要 Cron 采集后逐步补全；Volume 7D 来自 K 线聚合。</CardDescription>
+          <CardDescription>7D OI 与平台 Volume 走势需要 Cron 快照逐步补全。</CardDescription>
         </CardHeader>
         <CardContent>
           {protocolsQuery.isError ? (

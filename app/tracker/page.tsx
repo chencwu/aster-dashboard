@@ -47,7 +47,7 @@ function TrackerContent() {
         <div>
           <h1 className="text-2xl font-semibold">OI / Volume 增长追踪</h1>
           <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-            用 OI 快照识别堆仓，用 K 线成交额识别突然爆量；没有 Postgres 时 OI 区域会显示采集状态。
+            用 OI 与 24h 成交额快照识别堆仓和爆量；没有 Postgres 时 OI 区域会显示采集状态。
           </p>
         </div>
         <div className="grid gap-3 sm:grid-cols-[auto_16rem]">
@@ -88,7 +88,7 @@ function TrackerContent() {
         <DeltaLeaderboard
           metric="volume"
           title="Volume Δ 排行榜"
-          description="按 K 线成交额增长率寻找突然爆量的币种"
+          description="按 24h 成交额快照变化率寻找突然爆量的币种"
         />
       </section>
 

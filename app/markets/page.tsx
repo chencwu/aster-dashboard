@@ -10,13 +10,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { fetchJson } from "@/lib/client-fetch";
 import { PROTOCOLS } from "@/lib/protocols";
-import type { Market, ProtocolSlug } from "@/lib/types";
+import type { Market, MarketsQuality, ProtocolSlug } from "@/lib/types";
 
 type MarketsResponse = {
   ok: true;
   generatedAt: number;
   protocol: ProtocolSlug;
   markets: Market[];
+  quality: MarketsQuality;
 };
 
 export default function MarketsPage() {
@@ -71,7 +72,12 @@ export default function MarketsPage() {
       <Card>
         <CardHeader>
           <CardTitle>币种排行表</CardTitle>
-          <CardDescription>列头可排序，OI 24h Δ 大幅变化会高亮整行。</CardDescription>
+          <CardDescription>
+            列头可排序，OI 24h Δ 大幅变化会高亮整行。
+            {query.data?.quality
+              ? ` Delta 24h 覆盖 ${query.data.quality.oiDeltaCoverage["24h"]}/${query.data.quality.marketCount}，快照容忍 ${query.data.quality.maxSnapshotStalenessHours["24h"]}h。`
+              : null}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {query.isError ? (

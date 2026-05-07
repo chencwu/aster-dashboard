@@ -16,12 +16,8 @@ type Params = {
 };
 
 function parseHours(value: string | null) {
-  if (value === "5min") return 5 / 60;
-  if (value === "15min") return 15 / 60;
-  if (value === "30min") return 30 / 60;
   if (value === "1h") return 1;
-  if (value === "4h") return 4;
-  if (value === "8h") return 8;
+  if (value === "12h") return 12;
   if (value === "1d") return 24;
   if (value === "3d") return 24 * 3;
   return 24 * 7;

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getVolumeDeltaLeaderboard } from "@/lib/data";
-import type { DeltaPeriod } from "@/lib/types";
+import { getPrecomputedPayload, type PrecomputedKey } from "@/lib/db/precomputed";
+import type { ApiOk, DeltaLeaderboardItem, DeltaPeriod } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,19 @@ export async function GET(request: NextRequest) {
   const period = parsePeriod(request.nextUrl.searchParams.get("period"));
 
   try {
+    const precomputed = await getPrecomputedPayload<
+      ApiOk<{
+        metric: "volume";
+        period: DeltaPeriod;
+        status: "ready" | "insufficient_history";
+        items: DeltaLeaderboardItem[];
+      }>
+    >(`delta:volume:${period}` as PrecomputedKey);
+
+    if (precomputed) {
+      return NextResponse.json(precomputed);
+    }
+
     const items = await getVolumeDeltaLeaderboard(period);
     return NextResponse.json({
       ok: true,

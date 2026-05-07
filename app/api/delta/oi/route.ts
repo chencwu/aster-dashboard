@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOiDeltaLeaderboard } from "@/lib/data";
 import { isPostgresConfigured } from "@/lib/db/oi-history";
-import type { DeltaPeriod } from "@/lib/types";
+import { getPrecomputedPayload, type PrecomputedKey } from "@/lib/db/precomputed";
+import type { ApiOk, DeltaLeaderboardItem, DeltaPeriod } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +27,19 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const precomputed = await getPrecomputedPayload<
+      ApiOk<{
+        metric: "oi";
+        period: DeltaPeriod;
+        status: "ready" | "insufficient_history";
+        items: DeltaLeaderboardItem[];
+      }>
+    >(`delta:oi:${period}` as PrecomputedKey);
+
+    if (precomputed) {
+      return NextResponse.json(precomputed);
+    }
+
     const items = await getOiDeltaLeaderboard(period);
     return NextResponse.json({
       ok: true,

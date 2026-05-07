@@ -11,6 +11,7 @@ import type {
   HistoryInterval,
   HistoryPoint,
   Market,
+  MarketsQuality,
   Protocol,
   ProtocolSlug
 } from "@/lib/types";
@@ -18,14 +19,21 @@ import {
   attachOiDeltas,
   getProtocolOiAtOrBefore,
   getProtocolOiSeries,
+  getProtocolVolume24hSeries,
   isPostgresConfigured
 } from "@/lib/db/oi-history";
-import { cached } from "@/lib/cache";
 import { mapLimit, pctChange, sum } from "@/lib/utils";
 
 type GetMarketsOptions = {
   includeInvalidForSnapshot?: boolean;
 };
+
+type MarketsByProtocol = Record<ProtocolSlug, Market[]>;
+
+const protocolEntries: Array<[ProtocolSlug, (typeof PROTOCOLS)[ProtocolSlug]]> = [
+  ["aster", PROTOCOLS.aster],
+  ["hyperliquid", PROTOCOLS.hyperliquid]
+];
 
 export async function getMarkets(
   protocol: ProtocolSlug,
@@ -48,15 +56,17 @@ export async function getAllMarkets() {
   return { aster, hyperliquid };
 }
 
-export async function getDashboardStats(): Promise<DashboardStats> {
-  const { aster, hyperliquid } = await getAllMarkets();
-  const allMarkets = [...aster, ...hyperliquid];
-
+export function getDashboardStatsFromMarkets(markets: Market[]): DashboardStats {
   return {
-    totalOi: sum(allMarkets.map((market) => market.oi)),
-    totalVolume24h: sum(allMarkets.map((market) => market.volume24h)),
+    totalOi: sum(markets.map((market) => market.oi)),
+    totalVolume24h: sum(markets.map((market) => market.volume24h)),
     protocolCount: 2
   };
+}
+
+export async function getDashboardStats(): Promise<DashboardStats> {
+  const { aster, hyperliquid } = await getAllMarkets();
+  return getDashboardStatsFromMarkets([...aster, ...hyperliquid]);
 }
 
 export async function fetchVolumeHistory(
@@ -70,63 +80,29 @@ export async function fetchVolumeHistory(
     : fetchHyperliquidVolumeHistory(symbol, interval, limit);
 }
 
-async function getProtocolVolumeSeries(
-  protocol: ProtocolSlug,
-  markets: Market[],
-  days = 7
-): Promise<HistoryPoint[]> {
-  const cacheKey = `${protocol}:protocol-volume:${days}`;
-
-  return cached(cacheKey, 5 * 60_000, async () => {
-    const sampledMarkets = [...markets]
-      .sort((left, right) => right.volume24h - left.volume24h)
-      .slice(0, 80);
-
-    const histories = await mapLimit(sampledMarkets, 10, async (market) => {
-      try {
-        return await fetchVolumeHistory(protocol, market.symbol, "1d", days);
-      } catch {
-        return [];
-      }
-    });
-
-    const buckets = new Map<number, number>();
-    histories.flat().forEach((point) => {
-      const bucket = new Date(point.ts);
-      bucket.setUTCHours(0, 0, 0, 0);
-      const ts = bucket.getTime();
-      buckets.set(ts, (buckets.get(ts) ?? 0) + point.value);
-    });
-
-    return Array.from(buckets.entries())
-      .map(([ts, value]) => ({ ts, value }))
-      .sort((left, right) => left.ts - right.ts)
-      .slice(-days);
-  });
+function previousPointValue(points: HistoryPoint[], hoursAgo: number) {
+  const targetTs = Date.now() - hoursAgo * 60 * 60 * 1000;
+  return [...points].reverse().find((point) => point.ts <= targetTs)?.value ?? null;
 }
 
-export async function getProtocols(): Promise<Protocol[]> {
-  const { aster, hyperliquid } = await getAllMarkets();
-
+export async function getProtocolsFromMarkets(marketsByProtocol: MarketsByProtocol): Promise<Protocol[]> {
   return Promise.all(
-    ([
-      ["aster", aster],
-      ["hyperliquid", hyperliquid]
-    ] as const).map(async ([slug, markets]) => {
+    protocolEntries.map(async ([slug, config]) => {
+      const markets = marketsByProtocol[slug];
       const oi = sum(markets.map((market) => market.oi));
       const volume24h = sum(markets.map((market) => market.volume24h));
       const [oiSeries, oi24hAgo, volumeSeries] = await Promise.all([
         getProtocolOiSeries(slug),
         getProtocolOiAtOrBefore(slug, 24),
-        getProtocolVolumeSeries(slug, markets)
+        getProtocolVolume24hSeries(slug)
       ]);
-      const previousVolume = volumeSeries.at(-2)?.value ?? null;
+      const previousVolume = previousPointValue(volumeSeries, 24);
 
       return {
         slug,
-        name: PROTOCOLS[slug].name,
-        logo: PROTOCOLS[slug].logo,
-        url: PROTOCOLS[slug].url,
+        name: config.name,
+        logo: config.logo,
+        url: config.url,
         oi,
         oi7d: oiSeries.map((point) => point.value),
         oiDelta24hPct: oi24hAgo == null ? null : pctChange(oi, oi24hAgo),
@@ -140,21 +116,24 @@ export async function getProtocols(): Promise<Protocol[]> {
   );
 }
 
+export async function getProtocols(): Promise<Protocol[]> {
+  return getProtocolsFromMarkets(await getAllMarkets());
+}
+
+function pickVolumeDelta(market: Market, period: DeltaPeriod) {
+  if (period === "1h") return market.volumeDelta1hPct;
+  if (period === "24h") return market.volumeDelta24hPct;
+  return market.volumeDelta7dPct;
+}
+
 function pickOiDelta(market: Market, period: DeltaPeriod) {
   if (period === "1h") return market.oiDelta1hPct;
   if (period === "24h") return market.oiDelta24hPct;
   return market.oiDelta7dPct;
 }
 
-export async function getOiDeltaLeaderboard(period: DeltaPeriod) {
-  if (!isPostgresConfigured()) return [];
-
-  const [aster, hyperliquid] = await Promise.all([
-    getMarketsWithOiDeltas("aster"),
-    getMarketsWithOiDeltas("hyperliquid")
-  ]);
-
-  return [...aster, ...hyperliquid]
+export function getOiDeltaLeaderboardFromMarkets(markets: Market[], period: DeltaPeriod) {
+  return markets
     .map(
       (market): DeltaLeaderboardItem => ({
         protocol: market.protocol,
@@ -168,6 +147,17 @@ export async function getOiDeltaLeaderboard(period: DeltaPeriod) {
     .filter((item) => item.deltaPct != null)
     .sort((left, right) => (right.deltaPct ?? -Infinity) - (left.deltaPct ?? -Infinity))
     .slice(0, 30);
+}
+
+export async function getOiDeltaLeaderboard(period: DeltaPeriod) {
+  if (!isPostgresConfigured()) return [];
+
+  const [aster, hyperliquid] = await Promise.all([
+    getMarketsWithOiDeltas("aster"),
+    getMarketsWithOiDeltas("hyperliquid")
+  ]);
+
+  return getOiDeltaLeaderboardFromMarkets([...aster, ...hyperliquid], period);
 }
 
 function splitWindow(points: HistoryPoint[], period: DeltaPeriod) {
@@ -207,7 +197,16 @@ async function volumeDeltaForMarket(
 export async function getVolumeDeltaLeaderboard(period: DeltaPeriod) {
   const { aster, hyperliquid } = await getAllMarkets();
   const markets = [...aster, ...hyperliquid].filter((market) => market.volume24h > 0);
-  const items = await mapLimit(markets, 6, async (market) => {
+
+  if (isPostgresConfigured()) {
+    const marketsWithDeltas = await attachOiDeltas(markets);
+    return getVolumeDeltaLeaderboardFromMarkets(marketsWithDeltas, period);
+  }
+
+  const sampledMarkets = [...markets]
+    .sort((left, right) => right.volume24h - left.volume24h)
+    .slice(0, 80);
+  const items = await mapLimit(sampledMarkets, 6, async (market) => {
     try {
       return volumeDeltaForMarket(market, period);
     } catch {
@@ -219,4 +218,48 @@ export async function getVolumeDeltaLeaderboard(period: DeltaPeriod) {
     .filter((item): item is DeltaLeaderboardItem => item !== null && item.deltaPct != null)
     .sort((left, right) => (right.deltaPct ?? -Infinity) - (left.deltaPct ?? -Infinity))
     .slice(0, 30);
+}
+
+export function getVolumeDeltaLeaderboardFromMarkets(markets: Market[], period: DeltaPeriod) {
+  return markets
+    .filter((market) => market.volume24h > 0)
+    .map(
+      (market): DeltaLeaderboardItem => ({
+        protocol: market.protocol,
+        symbol: market.symbol,
+        rawSymbol: market.rawSymbol,
+        value: market.volume24h,
+        deltaPct: pickVolumeDelta(market, period),
+        markPrice: market.markPrice
+      })
+    )
+    .filter((item) => item.deltaPct != null)
+    .sort((left, right) => (right.deltaPct ?? -Infinity) - (left.deltaPct ?? -Infinity))
+    .slice(0, 30);
+}
+
+function countKnown(markets: Market[], pick: (market: Market) => number | null) {
+  return markets.filter((market) => pick(market) != null).length;
+}
+
+export function getMarketsQuality(markets: Market[]): MarketsQuality {
+  return {
+    deltaSource: isPostgresConfigured() ? "postgres_snapshots" : "not_configured",
+    marketCount: markets.length,
+    maxSnapshotStalenessHours: {
+      "1h": 1,
+      "24h": 3,
+      "7d": 12
+    },
+    oiDeltaCoverage: {
+      "1h": countKnown(markets, (market) => market.oiDelta1hPct),
+      "24h": countKnown(markets, (market) => market.oiDelta24hPct),
+      "7d": countKnown(markets, (market) => market.oiDelta7dPct)
+    },
+    volumeDeltaCoverage: {
+      "1h": countKnown(markets, (market) => market.volumeDelta1hPct),
+      "24h": countKnown(markets, (market) => market.volumeDelta24hPct),
+      "7d": countKnown(markets, (market) => market.volumeDelta7dPct)
+    }
+  };
 }

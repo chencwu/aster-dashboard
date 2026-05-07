@@ -85,7 +85,7 @@ export function DeltaLeaderboard({ metric, title, description }: Props) {
                     <Badge>{PROTOCOLS[item.protocol].name}</Badge>
                   </div>
                   <div className="mt-0.5 text-xs text-muted-foreground">
-                    {metric === "oi" ? "当前 OI" : "窗口成交额"} {formatUsd(item.value)}
+                    {metric === "oi" ? "当前 OI" : "当前 24h 成交额"} {formatUsd(item.value)}
                   </div>
                 </div>
                 <div className="flex items-center gap-1 text-emerald-300">

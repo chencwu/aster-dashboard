@@ -52,8 +52,6 @@ const columns: Array<{ key: SortKey; label: string }> = [
   { key: "oiDelta24hPct", label: "OI 24h Δ" },
   { key: "oiDelta7dPct", label: "OI 7d Δ" },
   { key: "volume24h", label: "Volume 24h" },
-  { key: "volumeDelta24hPct", label: "Vol 24h Δ" },
-  { key: "volumeDelta7dPct", label: "Vol 7d Δ" },
   { key: "fundingRate", label: "Funding" },
   { key: "ratio", label: "OI/Vol" }
 ];
@@ -141,12 +139,12 @@ export function MarketsTable({ markets }: Props) {
       </div>
 
       <div className="overflow-x-auto rounded-lg border">
-        <table className="w-full min-w-[1280px] text-left text-sm">
+        <table className="w-full min-w-[1050px] text-left text-sm">
           <thead className="border-b bg-muted/30 text-xs uppercase text-muted-foreground">
             <tr>
-              <th className="px-4 py-3 font-medium">#</th>
+              <th className="px-3 py-2 font-medium">#</th>
               {columns.map((column) => (
-                <th key={column.key} className="px-4 py-3 font-medium">
+                <th key={column.key} className="px-3 py-2 font-medium">
                   <button
                     className="inline-flex items-center gap-1 hover:text-foreground"
                     onClick={() => toggleSort(column.key)}
@@ -167,15 +165,14 @@ export function MarketsTable({ markets }: Props) {
               return (
                 <Fragment key={rowKey}>
                   <tr
-                    key={rowKey}
                     className={cn(
                       "border-b border-border/70 last:border-0",
                       isAnomaly(market) && "bg-amber-400/10",
                       expanded && "bg-muted/20"
                     )}
                   >
-                    <td className="px-4 py-3 text-muted-foreground">{index + 1}</td>
-                    <td className="px-4 py-3 font-semibold text-foreground">
+                    <td className="px-3 py-2 text-muted-foreground">{index + 1}</td>
+                    <td className="px-3 py-2 font-semibold text-foreground">
                       <button
                         className="inline-flex items-center gap-2 hover:text-primary"
                         onClick={() => setExpandedKey(expanded ? null : rowKey)}
@@ -188,41 +185,35 @@ export function MarketsTable({ markets }: Props) {
                         {market.symbol}
                       </button>
                     </td>
-                    <td className="px-4 py-3">{formatUsd(market.markPrice)}</td>
-                    <td className={`px-4 py-3 ${deltaTone(market.change24hPct)}`}>
+                    <td className="px-3 py-2">{formatUsd(market.markPrice)}</td>
+                    <td className={`px-3 py-2 ${deltaTone(market.change24hPct)}`}>
                       {formatPct(market.change24hPct)}
                     </td>
-                    <td className="px-4 py-3 font-medium">{formatUsd(market.oi)}</td>
-                    <td className={`px-4 py-3 ${deltaTone(market.oiDelta1hPct)}`}>
+                    <td className="px-3 py-2 font-medium">{formatUsd(market.oi)}</td>
+                    <td className={`px-3 py-2 ${deltaTone(market.oiDelta1hPct)}`}>
                       {formatPct(market.oiDelta1hPct)}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-2">
                       <Badge tone={badgeTone(market.oiDelta24hPct)}>
                         {formatPct(market.oiDelta24hPct)}
                       </Badge>
                     </td>
-                    <td className={`px-4 py-3 ${deltaTone(market.oiDelta7dPct)}`}>
+                    <td className={`px-3 py-2 ${deltaTone(market.oiDelta7dPct)}`}>
                       {formatPct(market.oiDelta7dPct)}
                     </td>
-                    <td className="px-4 py-3 font-medium">{formatUsd(market.volume24h)}</td>
-                    <td className={`px-4 py-3 ${deltaTone(market.volumeDelta24hPct)}`}>
-                      {formatPct(market.volumeDelta24hPct)}
-                    </td>
-                    <td className={`px-4 py-3 ${deltaTone(market.volumeDelta7dPct)}`}>
-                      {formatPct(market.volumeDelta7dPct)}
-                    </td>
-                    <td className={`px-4 py-3 ${deltaTone(market.fundingRate)}`}>
+                    <td className="px-3 py-2 font-medium">{formatUsd(market.volume24h)}</td>
+                    <td className={`px-3 py-2 ${deltaTone(market.fundingRate)}`}>
                       {formatFunding(market.fundingRate)}
                     </td>
-                    <td className="px-4 py-3">{ratio.toFixed(2)}</td>
+                    <td className="px-3 py-2">{ratio.toFixed(2)}</td>
                   </tr>
-                  {expanded ? (
-                    <tr key={`${rowKey}-details`} className="border-b border-border/70 bg-background">
+                  {expanded && (
+                    <tr className="border-b border-border/70 bg-background">
                       <td colSpan={columns.length + 1} className="px-4 py-4">
                         <OiCollectionDetails market={market} />
                       </td>
                     </tr>
-                  ) : null}
+                  )}
                 </Fragment>
               );
             })}
@@ -247,20 +238,15 @@ function OiCollectionDetails({ market }: { market: Market }) {
   const segments = useMemo(() => historySegments(points), [points]);
 
   return (
-    <div className="grid gap-4 rounded-md border bg-card p-4 lg:grid-cols-[1fr_22rem]">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="grid gap-4 rounded-md border bg-card p-4 lg:grid-cols-2">
+      <div className="grid gap-3 grid-cols-2">
         <DetailItem label="采集键" value={`${market.protocol} / ${market.symbol}`} />
         <DetailItem label="原始合约" value={market.rawSymbol} />
-        <DetailItem label="采集频率" value="5 分钟 / symbol" />
         <DetailItem label="Raw OI (base)" value={formatNumber(market.oiBase)} />
         <DetailItem label="Mark Price" value={formatUsd(market.markPrice)} />
         <DetailItem label="OI USD" value={formatUsd(market.oi)} />
         <DetailItem label="Funding" value={formatFunding(market.fundingRate)} />
         <DetailItem label="Volume 24h" value={formatUsd(market.volume24h)} />
-        <DetailItem
-          label="存库字段"
-          value="ts, oi_base, oi_usd, mark_price, funding_rate, volume24h_usd"
-        />
       </div>
 
       <div className="min-h-36 rounded-md border bg-background/60 p-3">

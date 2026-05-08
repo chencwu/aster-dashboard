@@ -3,7 +3,6 @@
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
-import { DeltaLeaderboard } from "@/components/DeltaLeaderboard";
 import { HistoryChart } from "@/components/HistoryChart";
 import { PriceChart } from "@/components/PriceChart";
 import { Input } from "@/components/ui/input";
@@ -77,19 +76,6 @@ function TrackerContent() {
             ))}
           </datalist>
         </div>
-      </section>
-
-      <section className="grid gap-4 lg:grid-cols-2">
-        <DeltaLeaderboard
-          metric="oi"
-          title="OI Δ 排行榜"
-          description="按 1h / 24h / 7d OI 增长率或增加量寻找正在被堆仓的币种"
-        />
-        <DeltaLeaderboard
-          metric="volume"
-          title="Volume Δ 排行榜"
-          description="按 24h 成交额快照变化率或增加量寻找突然爆量的币种"
-        />
       </section>
 
       <section className="grid gap-4 lg:grid-cols-2">

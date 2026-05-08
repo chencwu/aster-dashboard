@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, BarChart3, LineChart } from "lucide-react";
+import { Activity, BarChart3, LineChart, Trophy } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const links = [
   { href: "/", label: "总览", icon: BarChart3 },
   { href: "/markets", label: "币种", icon: Activity },
+  { href: "/leaderboard", label: "排行榜", icon: Trophy },
   { href: "/tracker", label: "追踪", icon: LineChart }
 ];
 

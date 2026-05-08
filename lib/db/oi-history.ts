@@ -94,6 +94,13 @@ type SnapshotPayloadRow = {
   imputed_reason: string | null;
 };
 
+const FRESH_READ_QUERY_TEXT_TTL_MS = 60_000;
+
+function freshReadMarker(domain: string) {
+  const bucket = Math.floor(Date.now() / FRESH_READ_QUERY_TEXT_TTL_MS);
+  return `/* ${domain}:fresh:${bucket} */`;
+}
+
 function maxSnapshotStalenessHours(hoursAgo: number) {
   if (hoursAgo <= 1) return 1;
   if (hoursAgo <= 24) return 3;
@@ -115,19 +122,22 @@ export async function getOiHistory(
 ): Promise<HistoryPoint[]> {
   if (!isPostgresConfigured()) return [];
 
-  const { rows } = await sql<HistoryRow>`
-    /* oi:get-history */
+  const { rows } = await sql.query<HistoryRow>(
+    `
+    ${freshReadMarker("oi:get-history")}
     SELECT
       EXTRACT(EPOCH FROM ts) * 1000 AS ts,
       oi_usd::float AS value,
       is_imputed,
       imputed_reason
     FROM oi_snapshots
-    WHERE protocol = ${protocol}
-      AND symbol = ${symbol}
-      AND ts >= NOW() - (${hours} * INTERVAL '1 hour')
+    WHERE protocol = $1
+      AND symbol = $2
+      AND ts >= NOW() - ($3::int * INTERVAL '1 hour')
     ORDER BY ts ASC
-  `;
+  `,
+    [protocol, symbol, hours]
+  );
 
   return rows.map((row) => ({
     ts: toNumber(row.ts),
@@ -140,13 +150,16 @@ export async function getOiHistory(
 export async function getCollectedHours(protocol: ProtocolSlug, symbol: string) {
   if (!isPostgresConfigured()) return 0;
 
-  const { rows } = await sql<{ hours: number | string | null }>`
-    /* oi:collected-hours */
+  const { rows } = await sql.query<{ hours: number | string | null }>(
+    `
+    ${freshReadMarker("oi:collected-hours")}
     SELECT EXTRACT(EPOCH FROM (MAX(ts) - MIN(ts))) / 3600 AS hours
     FROM oi_snapshots
-    WHERE protocol = ${protocol}
-      AND symbol = ${symbol}
-  `;
+    WHERE protocol = $1
+      AND symbol = $2
+  `,
+    [protocol, symbol]
+  );
 
   return Math.max(0, toNumber(rows[0]?.hours));
 }
@@ -156,22 +169,25 @@ export async function getCollectionSummary(protocol: ProtocolSlug, symbol: strin
     return { collectedHours: 0, pointCount: 0, firstTs: null, lastTs: null };
   }
 
-  const { rows } = await sql<{
+  const { rows } = await sql.query<{
     hours: number | string | null;
     point_count: number | string;
     first_ts: Date | string | null;
     last_ts: Date | string | null;
-  }>`
-    /* oi:collection-summary */
+  }>(
+    `
+    ${freshReadMarker("oi:collection-summary")}
     SELECT
       EXTRACT(EPOCH FROM (MAX(ts) - MIN(ts))) / 3600 AS hours,
       COUNT(*) AS point_count,
       MIN(ts) AS first_ts,
       MAX(ts) AS last_ts
     FROM oi_snapshots
-    WHERE protocol = ${protocol}
-      AND symbol = ${symbol}
-  `;
+    WHERE protocol = $1
+      AND symbol = $2
+  `,
+    [protocol, symbol]
+  );
 
   const row = rows[0];
 
@@ -191,17 +207,20 @@ export async function getOiAtOrBefore(
   if (!isPostgresConfigured()) return null;
 
   const maxAgeHours = hoursAgo + maxSnapshotStalenessHours(hoursAgo);
-  const { rows } = await sql<{ value: number | string }>`
-    /* oi:at-or-before */
+  const { rows } = await sql.query<{ value: number | string }>(
+    `
+    ${freshReadMarker("oi:at-or-before")}
     SELECT oi_usd::float AS value
     FROM oi_snapshots
-    WHERE protocol = ${protocol}
-      AND symbol = ${symbol}
-      AND ts <= NOW() - (${hoursAgo} * INTERVAL '1 hour')
-      AND ts >= NOW() - (${maxAgeHours} * INTERVAL '1 hour')
+    WHERE protocol = $1
+      AND symbol = $2
+      AND ts <= NOW() - ($3::int * INTERVAL '1 hour')
+      AND ts >= NOW() - ($4::int * INTERVAL '1 hour')
     ORDER BY ts DESC
     LIMIT 1
-  `;
+  `,
+    [protocol, symbol, hoursAgo, maxAgeHours]
+  );
 
   return rows[0] ? toNumber(rows[0].value) : null;
 }
@@ -213,11 +232,12 @@ async function getSnapshotDeltaMap(protocol: ProtocolSlug, symbols: string[]) {
   if (!isPostgresConfigured() || !uniqueSymbols.length) return empty;
 
   const payload = JSON.stringify(uniqueSymbols.map((symbol) => ({ symbol })));
-  const { rows } = await sql<SnapshotDeltaRow>`
-    /* oi:snapshot-delta-map */
+  const { rows } = await sql.query<SnapshotDeltaRow>(
+    `
+    ${freshReadMarker("oi:snapshot-delta-map")}
     WITH requested AS (
       SELECT symbol
-      FROM jsonb_to_recordset(${payload}::jsonb) AS item(symbol TEXT)
+      FROM jsonb_to_recordset($1::jsonb) AS item(symbol TEXT)
     )
     SELECT
       requested.symbol,
@@ -231,7 +251,7 @@ async function getSnapshotDeltaMap(protocol: ProtocolSlug, symbols: string[]) {
     LEFT JOIN LATERAL (
       SELECT oi_usd::float AS value
       FROM oi_snapshots
-      WHERE protocol = ${protocol}
+      WHERE protocol = $2
         AND symbol = requested.symbol
         AND ts <= NOW() - (1 * INTERVAL '1 hour')
         AND ts >= NOW() - (2 * INTERVAL '1 hour')
@@ -241,7 +261,7 @@ async function getSnapshotDeltaMap(protocol: ProtocolSlug, symbols: string[]) {
     LEFT JOIN LATERAL (
       SELECT oi_usd::float AS value
       FROM oi_snapshots
-      WHERE protocol = ${protocol}
+      WHERE protocol = $2
         AND symbol = requested.symbol
         AND ts <= NOW() - (24 * INTERVAL '1 hour')
         AND ts >= NOW() - (27 * INTERVAL '1 hour')
@@ -251,7 +271,7 @@ async function getSnapshotDeltaMap(protocol: ProtocolSlug, symbols: string[]) {
     LEFT JOIN LATERAL (
       SELECT oi_usd::float AS value
       FROM oi_snapshots
-      WHERE protocol = ${protocol}
+      WHERE protocol = $2
         AND symbol = requested.symbol
         AND ts <= NOW() - (168 * INTERVAL '1 hour')
         AND ts >= NOW() - (180 * INTERVAL '1 hour')
@@ -261,7 +281,7 @@ async function getSnapshotDeltaMap(protocol: ProtocolSlug, symbols: string[]) {
     LEFT JOIN LATERAL (
       SELECT volume24h_usd::float AS value
       FROM oi_snapshots
-      WHERE protocol = ${protocol}
+      WHERE protocol = $2
         AND symbol = requested.symbol
         AND volume24h_usd IS NOT NULL
         AND ts <= NOW() - (1 * INTERVAL '1 hour')
@@ -272,7 +292,7 @@ async function getSnapshotDeltaMap(protocol: ProtocolSlug, symbols: string[]) {
     LEFT JOIN LATERAL (
       SELECT volume24h_usd::float AS value
       FROM oi_snapshots
-      WHERE protocol = ${protocol}
+      WHERE protocol = $2
         AND symbol = requested.symbol
         AND volume24h_usd IS NOT NULL
         AND ts <= NOW() - (24 * INTERVAL '1 hour')
@@ -283,7 +303,7 @@ async function getSnapshotDeltaMap(protocol: ProtocolSlug, symbols: string[]) {
     LEFT JOIN LATERAL (
       SELECT volume24h_usd::float AS value
       FROM oi_snapshots
-      WHERE protocol = ${protocol}
+      WHERE protocol = $2
         AND symbol = requested.symbol
         AND volume24h_usd IS NOT NULL
         AND ts <= NOW() - (168 * INTERVAL '1 hour')
@@ -291,7 +311,9 @@ async function getSnapshotDeltaMap(protocol: ProtocolSlug, symbols: string[]) {
       ORDER BY ts DESC
       LIMIT 1
     ) volume_7d ON TRUE
-  `;
+  `,
+    [payload, protocol]
+  );
 
   return new Map(
     rows.map((row) => [
@@ -351,8 +373,9 @@ export async function attachOiDeltas(markets: Market[]) {
 export async function getProtocolOiSeries(protocol: ProtocolSlug, hours = 168) {
   if (!isPostgresConfigured()) return [];
 
-  const { rows } = await sql<HistoryRow>`
-    /* oi:protocol-series */
+  const { rows } = await sql.query<HistoryRow>(
+    `
+    ${freshReadMarker("oi:protocol-series")}
     WITH hourly AS (
       SELECT
         symbol,
@@ -363,8 +386,8 @@ export async function getProtocolOiSeries(protocol: ProtocolSlug, hours = 168) {
           ORDER BY ts DESC
         ) AS rn
       FROM oi_snapshots
-      WHERE protocol = ${protocol}
-        AND ts >= NOW() - (${hours} * INTERVAL '1 hour')
+      WHERE protocol = $1
+        AND ts >= NOW() - ($2::int * INTERVAL '1 hour')
     )
     SELECT
       EXTRACT(EPOCH FROM bucket) * 1000 AS ts,
@@ -373,7 +396,9 @@ export async function getProtocolOiSeries(protocol: ProtocolSlug, hours = 168) {
     WHERE rn = 1
     GROUP BY bucket
     ORDER BY bucket ASC
-  `;
+  `,
+    [protocol, hours]
+  );
 
   return rows.map((row) => ({
     ts: toNumber(row.ts),
@@ -384,8 +409,9 @@ export async function getProtocolOiSeries(protocol: ProtocolSlug, hours = 168) {
 export async function getProtocolVolume24hSeries(protocol: ProtocolSlug, hours = 168) {
   if (!isPostgresConfigured()) return [];
 
-  const { rows } = await sql<HistoryRow>`
-    /* oi:protocol-volume-series */
+  const { rows } = await sql.query<HistoryRow>(
+    `
+    ${freshReadMarker("oi:protocol-volume-series")}
     WITH hourly AS (
       SELECT
         symbol,
@@ -396,9 +422,9 @@ export async function getProtocolVolume24hSeries(protocol: ProtocolSlug, hours =
           ORDER BY ts DESC
         ) AS rn
       FROM oi_snapshots
-      WHERE protocol = ${protocol}
+      WHERE protocol = $1
         AND volume24h_usd IS NOT NULL
-        AND ts >= NOW() - (${hours} * INTERVAL '1 hour')
+        AND ts >= NOW() - ($2::int * INTERVAL '1 hour')
     )
     SELECT
       EXTRACT(EPOCH FROM bucket) * 1000 AS ts,
@@ -407,7 +433,9 @@ export async function getProtocolVolume24hSeries(protocol: ProtocolSlug, hours =
     WHERE rn = 1
     GROUP BY bucket
     ORDER BY bucket ASC
-  `;
+  `,
+    [protocol, hours]
+  );
 
   return rows.map((row) => ({
     ts: toNumber(row.ts),
@@ -419,20 +447,23 @@ export async function getProtocolOiAtOrBefore(protocol: ProtocolSlug, hoursAgo: 
   if (!isPostgresConfigured()) return null;
 
   const maxAgeHours = hoursAgo + maxSnapshotStalenessHours(hoursAgo);
-  const { rows } = await sql<{ value: number | string | null }>`
-    /* oi:protocol-at-or-before */
+  const { rows } = await sql.query<{ value: number | string | null }>(
+    `
+    ${freshReadMarker("oi:protocol-at-or-before")}
     SELECT SUM(oi_usd)::float AS value
     FROM (
       SELECT DISTINCT ON (symbol)
         symbol,
         oi_usd
       FROM oi_snapshots
-      WHERE protocol = ${protocol}
-        AND ts <= NOW() - (${hoursAgo} * INTERVAL '1 hour')
-        AND ts >= NOW() - (${maxAgeHours} * INTERVAL '1 hour')
+      WHERE protocol = $1
+        AND ts <= NOW() - ($2::int * INTERVAL '1 hour')
+        AND ts >= NOW() - ($3::int * INTERVAL '1 hour')
       ORDER BY symbol, ts DESC
     ) latest
-  `;
+  `,
+    [protocol, hoursAgo, maxAgeHours]
+  );
 
   return rows[0]?.value == null ? null : toNumber(rows[0].value);
 }
@@ -442,8 +473,9 @@ function isPositiveFinite(value: number) {
 }
 
 async function getLatestSnapshotMap(protocol: ProtocolSlug) {
-  const { rows } = await sql<LatestSnapshotRow>`
-    /* oi:latest-snapshot-map */
+  const { rows } = await sql.query<LatestSnapshotRow>(
+    `
+    ${freshReadMarker("oi:latest-snapshot-map")}
     SELECT DISTINCT ON (symbol)
       symbol,
       oi_base::float AS oi_base,
@@ -452,9 +484,11 @@ async function getLatestSnapshotMap(protocol: ProtocolSlug) {
       funding_rate::float AS funding_rate,
       volume24h_usd::float AS volume24h_usd
     FROM oi_snapshots
-    WHERE protocol = ${protocol}
+    WHERE protocol = $1
     ORDER BY symbol, ts DESC
-  `;
+  `,
+    [protocol]
+  );
 
   return new Map(
     rows.map((row) => [

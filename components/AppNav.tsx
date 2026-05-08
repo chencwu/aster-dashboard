@@ -23,8 +23,8 @@ export function AppNav() {
             PX
           </span>
           <div>
-            <div className="font-semibold">Perp DEX Monitor</div>
-            <div className="text-xs text-muted-foreground">Aster / Hyperliquid OI 与成交量</div>
+            <div className="font-semibold">Southeast Casino</div>
+            <div className="text-xs text-muted-foreground">冷静冷静再冷静！</div>
           </div>
         </Link>
         <nav className="flex items-center gap-1 rounded-md border bg-card p-1">

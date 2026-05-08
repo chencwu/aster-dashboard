@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/snapshot-oi",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/snapshot-buyback",
+      "schedule": "*/15 * * * *"
     }
   ]
 }

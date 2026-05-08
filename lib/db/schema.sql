@@ -26,3 +26,24 @@ CREATE TABLE IF NOT EXISTS precomputed_payloads (
 
 CREATE INDEX IF NOT EXISTS idx_precomputed_payloads_generated_at
   ON precomputed_payloads (generated_at DESC);
+
+CREATE TABLE IF NOT EXISTS hl_buyback_fills (
+  tid TEXT PRIMARY KEY,
+  hash TEXT NOT NULL,
+  ts TIMESTAMPTZ NOT NULL,
+  px NUMERIC NOT NULL,
+  sz NUMERIC NOT NULL,
+  start_position NUMERIC
+);
+
+CREATE INDEX IF NOT EXISTS idx_hl_buyback_fills_ts
+  ON hl_buyback_fills (ts DESC);
+
+CREATE TABLE IF NOT EXISTS hl_buyback_balance_snapshots (
+  ts TIMESTAMPTZ PRIMARY KEY,
+  hype_balance NUMERIC NOT NULL,
+  entry_notional NUMERIC NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_hl_buyback_balance_ts
+  ON hl_buyback_balance_snapshots (ts DESC);

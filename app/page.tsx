@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { Activity, Database, Layers } from "lucide-react";
+import { BuybackSection } from "@/components/BuybackSection";
 import { OiBarChart } from "@/components/OiBarChart";
 import { OiPieChart } from "@/components/OiPieChart";
 import { ProtocolTable } from "@/components/ProtocolTable";
@@ -98,6 +99,8 @@ export default function DashboardPage() {
           <CardContent>{protocols.length ? <VolumePieChart items={protocols} /> : <LoadingPanel />}</CardContent>
         </Card>
       </section>
+
+      <BuybackSection />
 
       <Card>
         <CardHeader>

@@ -37,7 +37,7 @@ git status --short
 git pull --ff-only origin main
 npm install
 npm run build
-pm2 restart aster-dashboard --update-env
+pm2 restart aster-dashboard --update-envß
 ```
 
 如果 `git status --short` 没有输出，说明服务器工作区干净，可以直接 pull。

@@ -31,6 +31,7 @@ type Props = {
   protocol: ProtocolSlug;
   symbol: string;
   metric: "oi" | "volume";
+  description?: string;
 };
 
 const ranges: Array<{ value: Range; label: string }> = [
@@ -84,7 +85,7 @@ function historySegments(points: HistoryPoint[]) {
   });
 }
 
-export function HistoryChart({ title, protocol, symbol, metric }: Props) {
+export function HistoryChart({ title, protocol, symbol, metric, description }: Props) {
   const [range, setRange] = useState<Range>("7d");
   const url = useMemo(() => historyUrl(metric, protocol, symbol, range), [metric, protocol, range, symbol]);
   const query = useQuery({
@@ -105,7 +106,7 @@ export function HistoryChart({ title, protocol, symbol, metric }: Props) {
           <div>
             <CardTitle>{title}</CardTitle>
             <CardDescription>
-              {protocol} / {symbol}
+              {description ?? `${protocol} / ${symbol}`}
             </CardDescription>
           </div>
           <div className="flex flex-wrap gap-2">

@@ -64,7 +64,7 @@ export function BuybackSection() {
       <div className="flex flex-col gap-1">
         <h2 className="text-xl font-semibold">Hyperliquid 回购 (Assistance Fund)</h2>
         <p className="max-w-3xl text-sm text-muted-foreground">
-          AF 钱包 0xfefe…fefe 持续用协议费用买回 HYPE 并永久留存。统计窗口为最近 30 天，每 15 分钟增量更新。
+          AF 钱包 0xfefe…fefe 持续用协议费用买回 HYPE 并永久留存。统计窗口为最近 30 天，每 1 小时增量更新。
         </p>
       </div>
 

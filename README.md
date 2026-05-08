@@ -40,7 +40,7 @@
 | 每日 USDC 花费柱状图 | 近 30 天每日买回成本（USD） |
 | AF 余额累计曲线 | 每日 EOD 抓取的 AF HYPE 持仓走势，体现长期累积 |
 
-> 数据来自 Hyperliquid 自家 `info` 端点，**无第三方依赖**，每 15 分钟增量入库一次。
+> 数据来自 Hyperliquid 自家 `info` 端点，**无第三方依赖**，每 1 小时增量入库一次。
 
 ### 4. 平台明细表
 
@@ -120,8 +120,8 @@
 | Aster Mark Price + Funding Rate | `GET .../fapi/v1/premiumIndex` | 全市场或按 symbol |
 | Aster 单币种 K 线（用于 Volume 历史） | `GET .../fapi/v1/klines?symbol=BTCUSDT&interval=1h&limit=...` | 第 8 字段 `quoteAssetVolume` 直接是 USD |
 | **OI 历史（两家）** | **本地 Postgres 落库**，每 5 分钟 Cron 写入快照 | API 都不返回历史 OI |
-| Hyperliquid AF 买回成交 | `POST .../info` body `{"type":"userFillsByTime","user":"0xfefe…fefe","aggregateByTime":true}` | 过滤 `coin === "@107" && dir === "Buy"`，按 `tid` 去重，每 15 分钟增量入库 |
-| Hyperliquid AF HYPE 余额 | `POST .../info` body `{"type":"spotClearinghouseState","user":"0xfefe…fefe"}` | 取 `balances[].coin === "HYPE"` 的 `total` 与 `entryNtl`，每 15 分钟快照入库 |
+| Hyperliquid AF 买回成交 | `POST .../info` body `{"type":"userFillsByTime","user":"0xfefe…fefe","aggregateByTime":true}` | 过滤 `coin === "@107" && dir === "Buy"`，按 `tid` 去重，每 1 小时增量入库 |
+| Hyperliquid AF HYPE 余额 | `POST .../info` body `{"type":"spotClearinghouseState","user":"0xfefe…fefe"}` | 取 `balances[].coin === "HYPE"` 的 `total` 与 `entryNtl`，每 1 小时快照入库 |
 
 > 所有外部接口走 Next.js API Route 代理 + 60s ~ 5min 缓存，避免限流。
 > **本项目不依赖 DefiLlama 或任何第三方聚合接口。**
@@ -147,7 +147,7 @@
 | 数据请求 | TanStack Query（轮询 + 缓存） |
 | 数字格式化 | numeral.js |
 | OI 历史与读模型存储 | Vercel Postgres (Neon) |
-| 定时任务 | Vercel Cron：每 5 分钟写 OI 快照 + 预计算 payload；每 15 分钟拉 AF 买回 fills + 余额快照 |
+| 定时任务 | Vercel Cron / OS crontab：每 5 分钟写 OI 快照 + 预计算 payload；每 1 小时拉 AF 买回 fills + 余额快照（**自部署必须配 OS crontab，详见 DEPLOYMENT.md**） |
 | 部署 | Vercel |
 
 ---
@@ -160,7 +160,7 @@
 | OI 快照写库 + stats/protocols/markets/delta 预计算（Cron） | 5 分钟 |
 | 单币种 Volume 历史 K 线 | 5 分钟（按需查询，TanStack Query 缓存） |
 | 平台 Volume 走势 / Δ 排行 | 5 分钟（优先使用 Cron 快照） |
-| Hyperliquid 回购数据写库 | 15 分钟（增量抓 AF fills + 余额） |
+| Hyperliquid 回购数据写库 | 1 小时（增量抓 AF fills + 余额） |
 | 总览页回购模块前端轮询 | 5 分钟 |
 
 ---
@@ -195,7 +195,7 @@ app/
    ├─ buyback/hyperliquid/route.ts         AF 回购 KPI / 日序列 / 余额序列
    ├─ oi-debug/route.ts                    OI Postgres 调试端点（参数化 vs 字面量 vs make_interval 多种 SQL 形式对比，用于排查 plan-cache 类问题）
    ├─ cron/snapshot-oi/route.ts            每 5min 写 OI 快照并生成预计算 payload
-   └─ cron/snapshot-buyback/route.ts       每 15min 增量抓 AF fills + HYPE 余额快照
+   └─ cron/snapshot-buyback/route.ts       每 1h 增量抓 AF fills + HYPE 余额快照
 
 components/
 ├─ StatCard.tsx
@@ -352,7 +352,7 @@ CREATE INDEX idx_hl_buyback_balance_ts ON hl_buyback_balance_snapshots (ts DESC)
 12. **Hyperliquid 回购模块**：
     - 新增 `hl_buyback_fills` / `hl_buyback_balance_snapshots` 两张表
     - `lib/sources/hyperliquid-buyback.ts` 封装 `userFillsByTime` 分页拉取（首跑回拉 30 天，后续按 `MAX(ts)+1ms` 增量）+ `spotClearinghouseState` 余额抓取
-    - `/api/cron/snapshot-buyback` 每 15 分钟写库；`/api/buyback/hyperliquid` 返回 KPI、24h/7d 窗口、日序列、余额序列
+    - `/api/cron/snapshot-buyback` 每 1 小时写库；`/api/buyback/hyperliquid` 返回 KPI、24h/7d 窗口、日序列、余额序列
     - 总览页 `BuybackSection` 渲染 3 个 KPI 卡 + 日 HYPE 柱 + 日 USDC 柱 + AF 余额面积图
 13. **Vercel 部署**
 
@@ -381,6 +381,6 @@ CREATE INDEX idx_hl_buyback_balance_ts ON hl_buyback_balance_snapshots (ts DESC)
 - **OI 历史不可回填**：前端在数据不足时显示 "已采集 N 小时" 而非 "—"，避免误以为接口失败。
 - **HYPE 现货 token 编号**：当前为 `@107`（HYPE/USDC），写在 `lib/sources/hyperliquid-buyback.ts` 的 `HYPE_SPOT_COIN` 常量；若 Hyperliquid 调整 spot index 改这一处即可。
 - **AF 回购首跑回拉范围**：`/api/cron/snapshot-buyback` 默认回拉 30 天 fills（`DEFAULT_BACKFILL_DAYS = 30`），之后增量；如需更长历史调大该常量并手动触发一次 cron。
-- **AF 余额累计曲线启动**：cron 每 15 分钟写一行实时 balance snapshot；同时每次跑 cron 会用 `backfillBalanceFromFills()` 从 `hl_buyback_fills` 反推近 30 天每日 EOD 余额（取每天最后一笔 fill 的 `start_position + sz`，按 `ON CONFLICT DO NOTHING` 不覆盖已有真实快照）。所以**首次触发 cron 后 30 天曲线立刻就有数据**。
+- **AF 余额累计曲线启动**：cron 每 1 小时写一行实时 balance snapshot；同时每次跑 cron 会用 `backfillBalanceFromFills()` 从 `hl_buyback_fills` 反推近 30 天每日 EOD 余额（取每天最后一笔 fill 的 `start_position + sz`，按 `ON CONFLICT DO NOTHING` 不覆盖已有真实快照）。所以**首次触发 cron 后 30 天曲线立刻就有数据**。
 - **回购数字展示格式**：累计 HYPE / AF 余额这类大数走 `formatCompactNumber`（≥1B→B、≥1M→M、≥1K→K，规则与 `formatUsd` 一致），KPI 大字与图表 Y 轴使用紧凑形式（如 `44.01M HYPE`、`0.10M`），tooltip 仍保留完整精度（如 `44,006,145.05 HYPE`）方便核对。
 - **Postgres prepared-plan 缓存陷阱（多次踩坑，统一两道防线）**：`@vercel/postgres` 在 Neon HTTP 端点上会按 SQL 文本复用 server-side prepared plan/result。表刚建或统计信息陈旧时被 prepare 的 generic plan，**后续 INSERT 不会自动 invalidate**，长期运行的进程（生产 pm2、Vercel）会"凝固"返回旧数据；本地 `next dev` 经常重启所以看不出来。**已踩两次**：(a) buyback helper 在 fresh table 期被 prepare，多 aggregate SELECT 永久返回 0；(b) `getOiHistory` 在生产服务器上对某些 `hours` 值返回的 lastPoint 比 `MAX(ts)` 早几小时（直接 sql 查表能看到最新行）。**统一修法两道防线**：1) 写入函数（`insertBuybackFills` / `insertBalanceSnapshot` / `insertOiSnapshots`）末尾跑 `ANALYZE`，强制更新统计 + 触发 plan 重评估；2) 每条 helper SELECT 加 `/* domain:* */` marker comment（如 `/* oi:get-history */`、`/* buyback:totals */`），让 SQL 文本与 fresh-table 时不同。新加 helper 写读 SQL 时按这个约定来。

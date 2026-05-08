@@ -102,16 +102,19 @@ pm2 save
 pm2 startup
 ```
 
-设置 5 分钟采集：
+设置定时采集（**自部署必须配置**，`vercel.json` 里的 cron 只在 Vercel 平台生效）：
 
 ```bash
 crontab -e
 ```
 
-添加：
+添加两行——OI 快照每 5 分钟、Hyperliquid 回购每 1 小时：
 
 ```cron
 */5 * * * * curl -fsS -H "Authorization: Bearer YOUR_CRON_SECRET" http://127.0.0.1:3001/api/cron/snapshot-oi >> /var/log/aster-oi-cron.log 2>&1
+0 * * * * curl -fsS -H "Authorization: Bearer YOUR_CRON_SECRET" http://127.0.0.1:3001/api/cron/snapshot-buyback >> /var/log/aster-buyback-cron.log 2>&1
 ```
+
+回购 cron 每小时整点跑一次，首次会回拉 30 天 fills，之后只增量更新（一般几十到几百条 fills/小时）。
 
 如果要绑定域名，使用 Nginx 反代到 `http://127.0.0.1:3001`，再用 Certbot 配 HTTPS。

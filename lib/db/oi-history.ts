@@ -116,6 +116,7 @@ export async function getOiHistory(
   if (!isPostgresConfigured()) return [];
 
   const { rows } = await sql<HistoryRow>`
+    /* oi:get-history */
     SELECT
       EXTRACT(EPOCH FROM ts) * 1000 AS ts,
       oi_usd::float AS value,
@@ -140,6 +141,7 @@ export async function getCollectedHours(protocol: ProtocolSlug, symbol: string) 
   if (!isPostgresConfigured()) return 0;
 
   const { rows } = await sql<{ hours: number | string | null }>`
+    /* oi:collected-hours */
     SELECT EXTRACT(EPOCH FROM (MAX(ts) - MIN(ts))) / 3600 AS hours
     FROM oi_snapshots
     WHERE protocol = ${protocol}
@@ -160,6 +162,7 @@ export async function getCollectionSummary(protocol: ProtocolSlug, symbol: strin
     first_ts: Date | string | null;
     last_ts: Date | string | null;
   }>`
+    /* oi:collection-summary */
     SELECT
       EXTRACT(EPOCH FROM (MAX(ts) - MIN(ts))) / 3600 AS hours,
       COUNT(*) AS point_count,
@@ -189,6 +192,7 @@ export async function getOiAtOrBefore(
 
   const maxAgeHours = hoursAgo + maxSnapshotStalenessHours(hoursAgo);
   const { rows } = await sql<{ value: number | string }>`
+    /* oi:at-or-before */
     SELECT oi_usd::float AS value
     FROM oi_snapshots
     WHERE protocol = ${protocol}
@@ -210,6 +214,7 @@ async function getSnapshotDeltaMap(protocol: ProtocolSlug, symbols: string[]) {
 
   const payload = JSON.stringify(uniqueSymbols.map((symbol) => ({ symbol })));
   const { rows } = await sql<SnapshotDeltaRow>`
+    /* oi:snapshot-delta-map */
     WITH requested AS (
       SELECT symbol
       FROM jsonb_to_recordset(${payload}::jsonb) AS item(symbol TEXT)
@@ -347,6 +352,7 @@ export async function getProtocolOiSeries(protocol: ProtocolSlug, hours = 168) {
   if (!isPostgresConfigured()) return [];
 
   const { rows } = await sql<HistoryRow>`
+    /* oi:protocol-series */
     WITH hourly AS (
       SELECT
         symbol,
@@ -379,6 +385,7 @@ export async function getProtocolVolume24hSeries(protocol: ProtocolSlug, hours =
   if (!isPostgresConfigured()) return [];
 
   const { rows } = await sql<HistoryRow>`
+    /* oi:protocol-volume-series */
     WITH hourly AS (
       SELECT
         symbol,
@@ -413,6 +420,7 @@ export async function getProtocolOiAtOrBefore(protocol: ProtocolSlug, hoursAgo: 
 
   const maxAgeHours = hoursAgo + maxSnapshotStalenessHours(hoursAgo);
   const { rows } = await sql<{ value: number | string | null }>`
+    /* oi:protocol-at-or-before */
     SELECT SUM(oi_usd)::float AS value
     FROM (
       SELECT DISTINCT ON (symbol)
@@ -435,6 +443,7 @@ function isPositiveFinite(value: number) {
 
 async function getLatestSnapshotMap(protocol: ProtocolSlug) {
   const { rows } = await sql<LatestSnapshotRow>`
+    /* oi:latest-snapshot-map */
     SELECT DISTINCT ON (symbol)
       symbol,
       oi_base::float AS oi_base,
@@ -564,6 +573,8 @@ export async function insertOiSnapshots(protocol: ProtocolSlug, markets: Market[
       is_imputed = EXCLUDED.is_imputed,
       imputed_reason = EXCLUDED.imputed_reason
   `;
+
+  await sql`ANALYZE oi_snapshots`;
 
   return rows.length;
 }

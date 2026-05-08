@@ -165,6 +165,14 @@
 
 ---
 
+### 调试端点
+
+| 路径 | 用途 |
+|---|---|
+| `/api/oi-debug?protocol=hyperliquid&symbol=DYDX` | 同时跑 `MAX(ts)` 整表、`literal24h/72h`、`param24h/72h`（参数化）、`make_interval24h`、`cast24h`，对比各 SQL 形式拿到的 max_ts 是否一致；外加 `pg_now`、`tz`、最新 3 行原始数据。**用于排查"前端拿到陈旧 lastPoint，但表里实际有新行"这类 prepared-plan 缓存类问题**。结果应该全部一致；如果出现差异，就是又踩到 plan cache 凝固。 |
+
+---
+
 ## 六、目录结构
 
 ```
@@ -185,6 +193,7 @@ app/
    ├─ delta/oi/route.ts                    OI Δ 排行（1h/24h/7d）
    ├─ delta/volume/route.ts                Volume Δ 排行
    ├─ buyback/hyperliquid/route.ts         AF 回购 KPI / 日序列 / 余额序列
+   ├─ oi-debug/route.ts                    OI Postgres 调试端点（参数化 vs 字面量 vs make_interval 多种 SQL 形式对比，用于排查 plan-cache 类问题）
    ├─ cron/snapshot-oi/route.ts            每 5min 写 OI 快照并生成预计算 payload
    └─ cron/snapshot-buyback/route.ts       每 15min 增量抓 AF fills + HYPE 余额快照
 
@@ -374,4 +383,4 @@ CREATE INDEX idx_hl_buyback_balance_ts ON hl_buyback_balance_snapshots (ts DESC)
 - **AF 回购首跑回拉范围**：`/api/cron/snapshot-buyback` 默认回拉 30 天 fills（`DEFAULT_BACKFILL_DAYS = 30`），之后增量；如需更长历史调大该常量并手动触发一次 cron。
 - **AF 余额累计曲线启动**：cron 每 15 分钟写一行实时 balance snapshot；同时每次跑 cron 会用 `backfillBalanceFromFills()` 从 `hl_buyback_fills` 反推近 30 天每日 EOD 余额（取每天最后一笔 fill 的 `start_position + sz`，按 `ON CONFLICT DO NOTHING` 不覆盖已有真实快照）。所以**首次触发 cron 后 30 天曲线立刻就有数据**。
 - **回购数字展示格式**：累计 HYPE / AF 余额这类大数走 `formatCompactNumber`（≥1B→B、≥1M→M、≥1K→K，规则与 `formatUsd` 一致），KPI 大字与图表 Y 轴使用紧凑形式（如 `44.01M HYPE`、`0.10M`），tooltip 仍保留完整精度（如 `44,006,145.05 HYPE`）方便核对。
-- **Postgres prepared-plan 缓存陷阱**：`@vercel/postgres` 在 Neon HTTP 端点上会按 SQL 文本复用 server-side prepared plan。如果一条 helper SELECT 在表刚建好（统计信息全 0）时被 prepare，Postgres 会缓存"返回空"的 generic plan，**后续 INSERT 不会自动 invalidate**。修复方式有两道防线：写入函数（`insertBuybackFills` / `insertBalanceSnapshot`）末尾跑 `ANALYZE` 强制更新统计信息；并且每条 helper SELECT 加 `/* buyback:* */` marker comment 让 SQL 文本与 fresh-table 时不同。两层一起保证不会再踩这个坑。
+- **Postgres prepared-plan 缓存陷阱（多次踩坑，统一两道防线）**：`@vercel/postgres` 在 Neon HTTP 端点上会按 SQL 文本复用 server-side prepared plan/result。表刚建或统计信息陈旧时被 prepare 的 generic plan，**后续 INSERT 不会自动 invalidate**，长期运行的进程（生产 pm2、Vercel）会"凝固"返回旧数据；本地 `next dev` 经常重启所以看不出来。**已踩两次**：(a) buyback helper 在 fresh table 期被 prepare，多 aggregate SELECT 永久返回 0；(b) `getOiHistory` 在生产服务器上对某些 `hours` 值返回的 lastPoint 比 `MAX(ts)` 早几小时（直接 sql 查表能看到最新行）。**统一修法两道防线**：1) 写入函数（`insertBuybackFills` / `insertBalanceSnapshot` / `insertOiSnapshots`）末尾跑 `ANALYZE`，强制更新统计 + 触发 plan 重评估；2) 每条 helper SELECT 加 `/* domain:* */` marker comment（如 `/* oi:get-history */`、`/* buyback:totals */`），让 SQL 文本与 fresh-table 时不同。新加 helper 写读 SQL 时按这个约定来。

@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
 import { DeltaLeaderboard } from "@/components/DeltaLeaderboard";
 import { HistoryChart } from "@/components/HistoryChart";
+import { PriceChart } from "@/components/PriceChart";
 import { Input } from "@/components/ui/input";
 import { fetchJson } from "@/lib/client-fetch";
 import { PROTOCOLS } from "@/lib/protocols";
@@ -108,6 +109,10 @@ function TrackerContent() {
             metric="volume"
           />
         ))}
+      </section>
+
+      <section>
+        <PriceChart symbol={activeSymbol} />
       </section>
     </div>
   );

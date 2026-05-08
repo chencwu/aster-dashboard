@@ -4,6 +4,8 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Activity } from "lucide-react";
 import {
+  Bar,
+  BarChart,
   CartesianGrid,
   Line,
   LineChart,
@@ -133,6 +135,29 @@ export function HistoryChart({ title, protocol, symbol, metric, description }: P
           <div className="flex h-72 items-center justify-center text-center text-sm text-muted-foreground">
             {query.data?.message ?? "历史数据不足，等待采集或换一个时间档。"}
           </div>
+        ) : metric === "volume" ? (
+          <ResponsiveContainer width="100%" height={288}>
+            <BarChart data={points}>
+              <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
+              <XAxis
+                dataKey="ts"
+                tickFormatter={formatTs}
+                tickLine={false}
+                axisLine={false}
+                minTickGap={28}
+              />
+              <YAxis tickFormatter={(value) => formatUsd(Number(value))} tickLine={false} axisLine={false} />
+              <Tooltip
+                cursor={{ fill: "rgba(255,255,255,0.04)" }}
+                labelFormatter={(value) => formatTs(Number(value))}
+                formatter={(value) => [formatUsd(Number(value)), "VOLUME"]}
+                contentStyle={{ background: "#111820", border: "1px solid #26323d", borderRadius: 8, color: "#eaf2f8" }}
+                labelStyle={{ color: "#eaf2f8" }}
+                itemStyle={{ color: "#eaf2f8" }}
+              />
+              <Bar dataKey="value" fill={metricStroke(metric)} radius={[3, 3, 0, 0]} isAnimationActive={false} />
+            </BarChart>
+          </ResponsiveContainer>
         ) : (
           <ResponsiveContainer width="100%" height={288}>
             <LineChart data={points}>

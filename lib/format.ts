@@ -2,10 +2,10 @@ import numeral from "numeral";
 
 export function formatUsd(value: number | null | undefined) {
   if (value == null || !Number.isFinite(value)) return "待采集";
-  if (Math.abs(value) >= 1_000_000_000) return `$${numeral(value / 1_000_000_000).format("0,0.00")}B`;
-  if (Math.abs(value) >= 1_000_000) return `$${numeral(value / 1_000_000).format("0,0.00")}M`;
-  if (Math.abs(value) >= 1_000) return `$${numeral(value / 1_000).format("0,0.00")}K`;
-  return `$${numeral(value).format("0,0.00")}`;
+  if (Math.abs(value) >= 1_000_000_000) return `$${numeral(value / 1_000_000_000).format("0,0.[00]")}B`;
+  if (Math.abs(value) >= 1_000_000) return `$${numeral(value / 1_000_000).format("0,0.[00]")}M`;
+  if (Math.abs(value) >= 1_000) return `$${numeral(value / 1_000).format("0,0.[00]")}K`;
+  return `$${numeral(value).format("0,0.[00]")}`;
 }
 
 export function formatNumber(value: number | null | undefined) {
@@ -15,9 +15,9 @@ export function formatNumber(value: number | null | undefined) {
 
 export function formatCompactNumber(value: number | null | undefined) {
   if (value == null || !Number.isFinite(value)) return "待采集";
-  if (Math.abs(value) >= 1_000_000_000) return `${numeral(value / 1_000_000_000).format("0,0.00")}B`;
-  if (Math.abs(value) >= 1_000_000) return `${numeral(value / 1_000_000).format("0,0.00")}M`;
-  if (Math.abs(value) >= 1_000) return `${numeral(value / 1_000).format("0,0.00")}K`;
+  if (Math.abs(value) >= 1_000_000_000) return `${numeral(value / 1_000_000_000).format("0,0.[00]")}B`;
+  if (Math.abs(value) >= 1_000_000) return `${numeral(value / 1_000_000).format("0,0.[00]")}M`;
+  if (Math.abs(value) >= 1_000) return `${numeral(value / 1_000).format("0,0.[00]")}K`;
   return numeral(value).format("0,0.[00]");
 }
 

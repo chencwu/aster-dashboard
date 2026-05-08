@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
 import { DeltaLeaderboard } from "@/components/DeltaLeaderboard";
@@ -28,8 +28,12 @@ export default function TrackerPage() {
 
 function TrackerContent() {
   const searchParams = useSearchParams();
-  const initialSymbol = searchParams.get("symbol")?.trim().toUpperCase() || "BTC";
-  const [symbol, setSymbol] = useState(initialSymbol);
+  const urlSymbol = searchParams.get("symbol")?.trim().toUpperCase() || "BTC";
+  const [symbol, setSymbol] = useState(urlSymbol);
+
+  useEffect(() => {
+    setSymbol(urlSymbol);
+  }, [urlSymbol]);
 
   const asterQuery = useQuery({
     queryKey: ["markets", "aster", "tracker"],

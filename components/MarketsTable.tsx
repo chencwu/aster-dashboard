@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useMemo, useState } from "react";
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowUpDown,
@@ -173,17 +174,25 @@ export function MarketsTable({ markets }: Props) {
                   >
                     <td className="px-3 py-2 text-muted-foreground">{index + 1}</td>
                     <td className="px-3 py-2 font-semibold text-foreground">
-                      <button
-                        className="inline-flex items-center gap-2 hover:text-primary"
-                        onClick={() => setExpandedKey(expanded ? null : rowKey)}
-                      >
-                        {expanded ? (
-                          <ChevronDown className="h-4 w-4" />
-                        ) : (
-                          <ChevronRight className="h-4 w-4" />
-                        )}
-                        {market.symbol}
-                      </button>
+                      <div className="inline-flex items-center gap-2">
+                        <button
+                          className="hover:text-primary"
+                          onClick={() => setExpandedKey(expanded ? null : rowKey)}
+                          aria-label={expanded ? "收起详情" : "展开详情"}
+                        >
+                          {expanded ? (
+                            <ChevronDown className="h-4 w-4" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4" />
+                          )}
+                        </button>
+                        <Link
+                          href={`/tracker?symbol=${encodeURIComponent(market.symbol)}`}
+                          className="hover:text-primary hover:underline"
+                        >
+                          {market.symbol}
+                        </Link>
+                      </div>
                     </td>
                     <td className="px-3 py-2">{formatUsd(market.markPrice)}</td>
                     <td className={`px-3 py-2 ${deltaTone(market.change24hPct)}`}>

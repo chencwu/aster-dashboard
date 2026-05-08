@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { Activity, ArrowUpRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -112,7 +113,12 @@ export function DeltaLeaderboard({ metric, title, description }: Props) {
                 <div className="text-sm text-muted-foreground">{index + 1}</div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="truncate font-medium">{item.symbol}</span>
+                    <Link
+                      href={`/tracker?symbol=${encodeURIComponent(item.symbol)}`}
+                      className="truncate font-medium hover:text-primary hover:underline"
+                    >
+                      {item.symbol}
+                    </Link>
                     <Badge>{PROTOCOLS[item.protocol].name}</Badge>
                   </div>
                   <div className="mt-0.5 text-xs text-muted-foreground">

@@ -126,6 +126,7 @@
 | Hyperliquid AF HYPE 余额 | `POST .../info` body `{"type":"spotClearinghouseState","user":"0xfefe…fefe"}` | 取 `balances[].coin === "HYPE"` 的 `total` 与 `entryNtl`，每 1 小时快照入库 |
 
 > 所有外部接口走 Next.js API Route 代理 + 60s ~ 5min 缓存，避免限流。
+> 追踪页币种资料卡依赖 CoinGecko；生产服务器建议配置 `COINGECKO_API_KEY` / `CG_API_KEY`，否则公共接口可能按服务器 IP 限流，导致部分资料卡临时不显示。
 > **本项目不依赖 DefiLlama 或任何第三方聚合接口。**
 
 ### Volume 历史 vs OI 历史的处理差异

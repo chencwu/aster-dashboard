@@ -70,13 +70,15 @@ export function CoinDescription({ symbol }: Props) {
     queryKey: ["coin-profile", normalizedSymbol],
     queryFn: () => fetchJson<CoinProfileResponse>(profileUrl(normalizedSymbol)),
     enabled: Boolean(normalizedSymbol),
-    staleTime: 24 * 60 * 60_000,
-    retry: 1
+    staleTime: 5 * 60_000,
+    refetchInterval: (query) => (query.state.data?.profile ? false : 5 * 60_000),
+    retry: 3,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 8000)
   });
 
   const profile = query.data?.profile;
 
-  if (!normalizedSymbol || query.isError || (!query.isLoading && !profile)) {
+  if (!normalizedSymbol || (!query.isLoading && !profile && !query.isError)) {
     return null;
   }
 
@@ -88,7 +90,7 @@ export function CoinDescription({ symbol }: Props) {
             {profile?.imageUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={profile.imageUrl} alt="" className="h-full w-full object-cover" />
-            ) : query.isLoading ? (
+            ) : query.isLoading || query.isError ? (
               <Info className="h-5 w-5" />
             ) : (
               normalizedSymbol.slice(0, 3)
@@ -103,7 +105,8 @@ export function CoinDescription({ symbol }: Props) {
               <Badge>CoinGecko</Badge>
             </div>
             <p className="max-w-5xl text-sm leading-6 text-muted-foreground">
-              {profile?.description ?? "加载币种简介..."}
+              {profile?.description ??
+                (query.isError ? "币种资料暂时加载失败，稍后会自动重试。" : "加载币种简介...")}
             </p>
             {profile ? (
               <div className="grid max-w-2xl grid-cols-1 gap-2 pt-2 sm:grid-cols-3">

@@ -16,10 +16,12 @@ npm run build
 ```env
 POSTGRES_URL=postgres://USER:PASSWORD@HOST:PORT/DATABASE?sslmode=require
 CRON_SECRET=replace_with_a_random_string_at_least_16_chars
+COINGECKO_API_KEY=optional_but_recommended_for_coin_profiles
 ```
 
 - `POSTGRES_URL`：Neon / Vercel Marketplace Postgres 的 pooled connection string。
 - `CRON_SECRET`：随机字符串，生产环境用来保护 `/api/cron/snapshot-oi`。
+- `COINGECKO_API_KEY` / `CG_API_KEY`：可选，但生产服务器建议配置。追踪页币种资料卡会调用 CoinGecko，未配置 key 时公共接口可能按服务器 IP 限流，表现为部分币种资料卡不显示。
 
 ## 3. 创建 Git 仓库
 
@@ -40,6 +42,7 @@ git commit -m "Initial dashboard MVP"
 5. Environment Variables 添加：
    - `POSTGRES_URL`
    - `CRON_SECRET`
+   - `COINGECKO_API_KEY`（可选但推荐）
 6. 点击 Deploy。
 
 ## 5. 配置 Postgres

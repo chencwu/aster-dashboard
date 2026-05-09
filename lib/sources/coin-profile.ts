@@ -1,8 +1,9 @@
-import { cached } from "@/lib/cache";
 import { coinGeckoConfig, marketDataSymbol } from "@/lib/sources/market-data";
 
 const COIN_PROFILE_CACHE_TTL_MS = 24 * 60 * 60_000;
+const COIN_PROFILE_MISS_CACHE_TTL_MS = 5 * 60_000;
 const MAX_DESCRIPTION_LENGTH = 360;
+const RETRYABLE_STATUS_CODES = new Set([408, 425, 429, 500, 502, 503, 504]);
 
 type CoinGeckoSearchCoin = {
   id?: string;
@@ -60,6 +61,20 @@ export type CoinProfile = {
   source: "coingecko";
 };
 
+type CoinProfileCacheEntry = {
+  expiresAt: number;
+  value: Promise<CoinProfile | null>;
+};
+
+declare global {
+  // eslint-disable-next-line no-var
+  var __coinProfileCache: Map<string, CoinProfileCacheEntry> | undefined;
+}
+
+const coinProfileCache =
+  globalThis.__coinProfileCache ?? new Map<string, CoinProfileCacheEntry>();
+globalThis.__coinProfileCache = coinProfileCache;
+
 function coinGeckoHeaders() {
   const { apiKey, baseUrl } = coinGeckoConfig();
   const headers: HeadersInit = {};
@@ -77,16 +92,32 @@ function coinGeckoHeaders() {
 
 async function fetchCoinGecko<T>(path: string) {
   const { headers, baseUrl } = coinGeckoHeaders();
-  const response = await fetch(`${baseUrl}${path}`, {
-    headers,
-    cache: "no-store"
-  });
+  const url = `${baseUrl}${path}`;
+  let lastError: unknown = null;
 
-  if (!response.ok) {
-    throw new Error(`CoinGecko API failed: ${response.status}`);
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const response = await fetch(url, {
+        headers,
+        cache: "no-store"
+      });
+
+      if (response.ok) {
+        return (await response.json()) as T;
+      }
+
+      lastError = new Error(`CoinGecko API failed: ${response.status}`);
+      if (!RETRYABLE_STATUS_CODES.has(response.status)) break;
+    } catch (error) {
+      lastError = error;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 350 * (attempt + 1)));
   }
 
-  return (await response.json()) as T;
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("CoinGecko API failed");
 }
 
 function decodeHtmlEntities(value: string) {
@@ -184,8 +215,29 @@ async function fetchCoinProfileUncached(symbol: string): Promise<CoinProfile | n
 export async function fetchCoinProfile(symbol: string) {
   const normalizedSymbol = marketDataSymbol(symbol);
   const cacheKey = `coin-profile:v3:${normalizedSymbol}`;
+  const now = Date.now();
+  const hit = coinProfileCache.get(cacheKey);
 
-  return cached(cacheKey, COIN_PROFILE_CACHE_TTL_MS, () =>
-    fetchCoinProfileUncached(symbol)
-  );
+  if (hit && hit.expiresAt > now) {
+    return hit.value;
+  }
+
+  const value = fetchCoinProfileUncached(symbol);
+  coinProfileCache.set(cacheKey, {
+    expiresAt: now + 60_000,
+    value
+  });
+
+  try {
+    const profile = await value;
+    coinProfileCache.set(cacheKey, {
+      expiresAt:
+        Date.now() + (profile ? COIN_PROFILE_CACHE_TTL_MS : COIN_PROFILE_MISS_CACHE_TTL_MS),
+      value: Promise.resolve(profile)
+    });
+    return profile;
+  } catch (error) {
+    coinProfileCache.delete(cacheKey);
+    throw error;
+  }
 }

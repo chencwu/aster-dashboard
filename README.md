@@ -120,13 +120,13 @@
 | Aster 单币种实时 OI(BASE) | `GET https://fapi.asterdex.com/fapi/v1/openInterest?symbol=BTCUSDT` | × markPrice 得 USD |
 | Aster Mark Price + Funding Rate | `GET .../fapi/v1/premiumIndex` | 全市场或按 symbol |
 | Aster 单币种 K 线（用于 Volume 历史） | `GET .../fapi/v1/klines?symbol=BTCUSDT&interval=1h&limit=...` | 第 8 字段 `quoteAssetVolume` 直接是 USD |
-| CoinGecko 币种简介 | `GET /search?query=...` + `GET /coins/{id}` | 追踪页展示轻量 coin profile；复用 `COINGECKO_API_KEY` / `CG_API_KEY` |
+| CoinGecko 币种简介 | `GET /search?query=...` + `GET /coins/{id}` | 追踪页展示轻量 coin profile；免费 Basic/Demo key 填 `COINGECKO_API_KEY` / `CG_API_KEY`，Pro key 填 `COINGECKO_PRO_API_KEY` |
 | **OI 历史（两家）** | **本地 Postgres 落库**，每 5 分钟 Cron 写入快照 | API 都不返回历史 OI |
 | Hyperliquid AF 买回成交 | `POST .../info` body `{"type":"userFillsByTime","user":"0xfefe…fefe","aggregateByTime":true}` | 过滤 `coin === "@107" && dir === "Buy"`，按 `tid` 去重，每 1 小时增量入库 |
 | Hyperliquid AF HYPE 余额 | `POST .../info` body `{"type":"spotClearinghouseState","user":"0xfefe…fefe"}` | 取 `balances[].coin === "HYPE"` 的 `total` 与 `entryNtl`，每 1 小时快照入库 |
 
 > 所有外部接口走 Next.js API Route 代理 + 60s ~ 5min 缓存，避免限流。
-> 追踪页币种资料卡依赖 CoinGecko；生产服务器建议配置 `COINGECKO_API_KEY` / `CG_API_KEY`，否则公共接口可能按服务器 IP 限流，导致部分资料卡临时不显示。
+> 追踪页币种资料卡依赖 CoinGecko；生产服务器建议配置免费 Basic/Demo `COINGECKO_API_KEY` / `CG_API_KEY`。只有付费 Pro key 才使用 `COINGECKO_PRO_API_KEY`，否则会走错 Pro endpoint，导致资料卡加载失败。
 > **本项目不依赖 DefiLlama 或任何第三方聚合接口。**
 
 ### Volume 历史 vs OI 历史的处理差异

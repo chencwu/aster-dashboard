@@ -16,12 +16,14 @@ npm run build
 ```env
 POSTGRES_URL=postgres://USER:PASSWORD@HOST:PORT/DATABASE?sslmode=require
 CRON_SECRET=replace_with_a_random_string_at_least_16_chars
-COINGECKO_API_KEY=optional_but_recommended_for_coin_profiles
+COINGECKO_API_KEY=optional_free_basic_demo_key_for_coin_profiles
+# COINGECKO_PRO_API_KEY=optional_paid_pro_key
 ```
 
 - `POSTGRES_URL`：Neon / Vercel Marketplace Postgres 的 pooled connection string。
 - `CRON_SECRET`：随机字符串，生产环境用来保护 `/api/cron/snapshot-oi`。
-- `COINGECKO_API_KEY` / `CG_API_KEY`：可选，但生产服务器建议配置。追踪页币种资料卡会调用 CoinGecko，未配置 key 时公共接口可能按服务器 IP 限流，表现为部分币种资料卡不显示。
+- `COINGECKO_API_KEY` / `CG_API_KEY`：CoinGecko 免费 Basic/Demo key，可选但生产服务器建议配置。代码会继续使用 public endpoint，并发送 `x-cg-demo-api-key`。
+- `COINGECKO_PRO_API_KEY`：只有付费 Pro key 才填。填了它才会切到 `https://pro-api.coingecko.com/api/v3` 并发送 `x-cg-pro-api-key`。
 
 ## 3. 创建 Git 仓库
 
@@ -42,7 +44,8 @@ git commit -m "Initial dashboard MVP"
 5. Environment Variables 添加：
    - `POSTGRES_URL`
    - `CRON_SECRET`
-   - `COINGECKO_API_KEY`（可选但推荐）
+   - `COINGECKO_API_KEY`（免费 Basic/Demo，可选但推荐）
+   - `COINGECKO_PRO_API_KEY`（仅付费 Pro 账号需要）
 6. 点击 Deploy。
 
 ## 5. 配置 Postgres

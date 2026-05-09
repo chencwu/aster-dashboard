@@ -40,9 +40,11 @@ function chunk<T>(items: T[], size: number) {
 }
 
 export function coinGeckoConfig() {
-  const apiKey = process.env.COINGECKO_API_KEY ?? process.env.CG_API_KEY ?? "";
+  const proApiKey = process.env.COINGECKO_PRO_API_KEY ?? "";
+  const apiKey = proApiKey || process.env.COINGECKO_API_KEY || process.env.CG_API_KEY || "";
   const baseUrl =
-    process.env.COINGECKO_API_BASE_URL ?? (apiKey ? COINGECKO_PRO_API_URL : COINGECKO_PUBLIC_API_URL);
+    process.env.COINGECKO_API_BASE_URL ??
+    (proApiKey ? COINGECKO_PRO_API_URL : COINGECKO_PUBLIC_API_URL);
 
   return { apiKey, baseUrl };
 }

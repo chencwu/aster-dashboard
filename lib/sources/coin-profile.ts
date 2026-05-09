@@ -3,6 +3,7 @@ import { coinGeckoConfig, marketDataSymbol } from "@/lib/sources/market-data";
 const COIN_PROFILE_CACHE_TTL_MS = 24 * 60 * 60_000;
 const COIN_PROFILE_MISS_CACHE_TTL_MS = 5 * 60_000;
 const MAX_DESCRIPTION_LENGTH = 360;
+const COINGECKO_REQUEST_TIMEOUT_MS = 8_000;
 const RETRYABLE_STATUS_CODES = new Set([408, 425, 429, 500, 502, 503, 504]);
 
 type CoinGeckoSearchCoin = {
@@ -96,10 +97,14 @@ async function fetchCoinGecko<T>(path: string) {
   let lastError: unknown = null;
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), COINGECKO_REQUEST_TIMEOUT_MS);
+
     try {
       const response = await fetch(url, {
         headers,
-        cache: "no-store"
+        cache: "no-store",
+        signal: controller.signal
       });
 
       if (response.ok) {
@@ -110,6 +115,8 @@ async function fetchCoinGecko<T>(path: string) {
       if (!RETRYABLE_STATUS_CODES.has(response.status)) break;
     } catch (error) {
       lastError = error;
+    } finally {
+      clearTimeout(timeout);
     }
 
     await new Promise((resolve) => setTimeout(resolve, 350 * (attempt + 1)));

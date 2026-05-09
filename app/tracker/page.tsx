@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
+import { CoinDescription } from "@/components/CoinDescription";
 import { HistoryChart } from "@/components/HistoryChart";
 import { PriceChart } from "@/components/PriceChart";
 import { Input } from "@/components/ui/input";
@@ -77,6 +78,8 @@ function TrackerContent() {
           </datalist>
         </div>
       </section>
+
+      <CoinDescription symbol={activeSymbol} />
 
       <section className="grid gap-4 lg:grid-cols-2">
         {PROTOCOL_SLUGS.map((slug) => (

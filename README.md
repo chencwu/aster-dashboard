@@ -86,6 +86,7 @@
 
 选定一个 Symbol（如 BTC），并排展示 Aster vs Hyperliquid：
 - 当前 OI / Volume / Funding / Mark Price 差值
+- 币种简介（CoinGecko profile，含项目名、简述、Rank、Market Cap、FDV、Total Supply、官网）
 - **OI 历史曲线**（多时间档 1H / 12H / 1D / 3D / 7D）
 - **Volume 历史曲线**（同上）
 
@@ -119,6 +120,7 @@
 | Aster 单币种实时 OI(BASE) | `GET https://fapi.asterdex.com/fapi/v1/openInterest?symbol=BTCUSDT` | × markPrice 得 USD |
 | Aster Mark Price + Funding Rate | `GET .../fapi/v1/premiumIndex` | 全市场或按 symbol |
 | Aster 单币种 K 线（用于 Volume 历史） | `GET .../fapi/v1/klines?symbol=BTCUSDT&interval=1h&limit=...` | 第 8 字段 `quoteAssetVolume` 直接是 USD |
+| CoinGecko 币种简介 | `GET /search?query=...` + `GET /coins/{id}` | 追踪页展示轻量 coin profile；复用 `COINGECKO_API_KEY` / `CG_API_KEY` |
 | **OI 历史（两家）** | **本地 Postgres 落库**，每 5 分钟 Cron 写入快照 | API 都不返回历史 OI |
 | Hyperliquid AF 买回成交 | `POST .../info` body `{"type":"userFillsByTime","user":"0xfefe…fefe","aggregateByTime":true}` | 过滤 `coin === "@107" && dir === "Buy"`，按 `tid` 去重，每 1 小时增量入库 |
 | Hyperliquid AF HYPE 余额 | `POST .../info` body `{"type":"spotClearinghouseState","user":"0xfefe…fefe"}` | 取 `balances[].coin === "HYPE"` 的 `total` 与 `entryNtl`，每 1 小时快照入库 |

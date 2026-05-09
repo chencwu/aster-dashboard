@@ -18,7 +18,7 @@ type MarketData = {
   fdv: number | null;
 };
 
-function marketDataSymbol(symbol: string) {
+export function marketDataSymbol(symbol: string) {
   const normalized = symbol.trim().toUpperCase();
   const withoutMultiplier = normalized.replace(/^(1000000|100000|10000|1000)/, "");
 
@@ -39,7 +39,7 @@ function chunk<T>(items: T[], size: number) {
   return chunks;
 }
 
-function coinGeckoConfig() {
+export function coinGeckoConfig() {
   const apiKey = process.env.COINGECKO_API_KEY ?? process.env.CG_API_KEY ?? "";
   const baseUrl =
     process.env.COINGECKO_API_BASE_URL ?? (apiKey ? COINGECKO_PRO_API_URL : COINGECKO_PUBLIC_API_URL);

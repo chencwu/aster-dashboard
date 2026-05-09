@@ -5,6 +5,13 @@ import { toNumber } from "@/lib/utils";
 
 export { isPostgresConfigured };
 
+const FRESH_READ_QUERY_TEXT_TTL_MS = 60_000;
+
+function freshReadMarker(domain: string) {
+  const bucket = Math.floor(Date.now() / FRESH_READ_QUERY_TEXT_TTL_MS);
+  return `/* ${domain}:fresh:${bucket} */`;
+}
+
 export async function ensureBuybackSchema() {
   if (!isPostgresConfigured()) return false;
 
@@ -49,10 +56,12 @@ async function analyzeBuybackTables() {
 export async function getLatestFillTime(): Promise<number | null> {
   if (!isPostgresConfigured()) return null;
 
-  const { rows } = await sql<{ ts: number | string | null }>`
-    /* buyback:latest-fill-time */
+  const { rows } = await sql.query<{ ts: number | string | null }>(
+    `
+    ${freshReadMarker("buyback:latest-fill-time")}
     SELECT EXTRACT(EPOCH FROM MAX(ts)) * 1000 AS ts FROM hl_buyback_fills
-  `;
+  `
+  );
 
   const value = rows[0]?.ts;
   return value == null ? null : toNumber(value);
@@ -94,7 +103,9 @@ export async function insertBuybackFills(fills: AssistanceFundFill[]) {
 export async function backfillBalanceFromFills() {
   if (!isPostgresConfigured()) return 0;
 
-  const { rows } = await sql<{ inserted: number | string | null }>`
+  const { rows } = await sql.query<{ inserted: number | string | null }>(
+    `
+    ${freshReadMarker("buyback:backfill-balance")}
     WITH ranked AS (
       SELECT
         ts,
@@ -126,7 +137,8 @@ export async function backfillBalanceFromFills() {
       RETURNING 1
     )
     SELECT COUNT(*) AS inserted FROM inserted
-  `;
+  `
+  );
 
   return Math.max(0, toNumber(rows[0]?.inserted));
 }
@@ -159,23 +171,26 @@ export type BuybackDailyRow = {
 export async function getDailyBuyback(days: number): Promise<BuybackDailyRow[]> {
   if (!isPostgresConfigured()) return [];
 
-  const { rows } = await sql<{
+  const { rows } = await sql.query<{
     date: Date | string;
     hype_bought: number | string;
     usdc_spent: number | string;
     fill_count: number | string;
-  }>`
-    /* buyback:daily */
+  }>(
+    `
+    ${freshReadMarker("buyback:daily")}
     SELECT
       date_trunc('day', ts) AS date,
       SUM(sz)::float AS hype_bought,
       SUM(sz * px)::float AS usdc_spent,
       COUNT(*) AS fill_count
     FROM hl_buyback_fills
-    WHERE ts >= NOW() - (${days} * INTERVAL '1 day')
+    WHERE ts >= NOW() - ($1::int * INTERVAL '1 day')
     GROUP BY date_trunc('day', ts)
     ORDER BY date ASC
-  `;
+  `,
+    [days]
+  );
 
   return rows.map((row) => ({
     date: new Date(row.date).toISOString().slice(0, 10),
@@ -198,14 +213,15 @@ export async function getBuybackTotals(): Promise<BuybackTotals> {
     return { hypeBought: 0, usdcSpent: 0, fillCount: 0, firstFillAt: null, lastFillAt: null };
   }
 
-  const { rows } = await sql<{
+  const { rows } = await sql.query<{
     hype_bought: number | string | null;
     usdc_spent: number | string | null;
     fill_count: number | string;
     first_ts: Date | string | null;
     last_ts: Date | string | null;
-  }>`
-    /* buyback:totals */
+  }>(
+    `
+    ${freshReadMarker("buyback:totals")}
     SELECT
       SUM(sz)::float AS hype_bought,
       SUM(sz * px)::float AS usdc_spent,
@@ -213,7 +229,8 @@ export async function getBuybackTotals(): Promise<BuybackTotals> {
       MIN(ts) AS first_ts,
       MAX(ts) AS last_ts
     FROM hl_buyback_fills
-  `;
+  `
+  );
 
   const row = rows[0];
 
@@ -234,17 +251,20 @@ export type WindowBuyback = {
 export async function getWindowBuyback(hours: number): Promise<WindowBuyback> {
   if (!isPostgresConfigured()) return { hypeBought: 0, usdcSpent: 0 };
 
-  const { rows } = await sql<{
+  const { rows } = await sql.query<{
     hype_bought: number | string | null;
     usdc_spent: number | string | null;
-  }>`
-    /* buyback:window */
+  }>(
+    `
+    ${freshReadMarker("buyback:window")}
     SELECT
       SUM(sz)::float AS hype_bought,
       SUM(sz * px)::float AS usdc_spent
     FROM hl_buyback_fills
-    WHERE ts >= NOW() - (${hours} * INTERVAL '1 hour')
-  `;
+    WHERE ts >= NOW() - ($1::int * INTERVAL '1 hour')
+  `,
+    [hours]
+  );
 
   return {
     hypeBought: toNumber(rows[0]?.hype_bought),
@@ -261,21 +281,24 @@ export type BalanceSeriesPoint = {
 export async function getDailyBalanceSeries(days: number): Promise<BalanceSeriesPoint[]> {
   if (!isPostgresConfigured()) return [];
 
-  const { rows } = await sql<{
+  const { rows } = await sql.query<{
     bucket: Date | string;
     hype_balance: number | string;
     entry_notional: number | string;
-  }>`
-    /* buyback:balance-series */
+  }>(
+    `
+    ${freshReadMarker("buyback:balance-series")}
     SELECT
       date_trunc('day', ts) AS bucket,
       (ARRAY_AGG(hype_balance ORDER BY ts DESC))[1]::float AS hype_balance,
       (ARRAY_AGG(entry_notional ORDER BY ts DESC))[1]::float AS entry_notional
     FROM hl_buyback_balance_snapshots
-    WHERE ts >= NOW() - (${days} * INTERVAL '1 day')
+    WHERE ts >= NOW() - ($1::int * INTERVAL '1 day')
     GROUP BY bucket
     ORDER BY bucket ASC
-  `;
+  `,
+    [days]
+  );
 
   return rows.map((row) => ({
     ts: new Date(row.bucket).getTime(),
@@ -287,17 +310,19 @@ export async function getDailyBalanceSeries(days: number): Promise<BalanceSeries
 export async function getLatestBalanceSnapshot(): Promise<BalanceSeriesPoint | null> {
   if (!isPostgresConfigured()) return null;
 
-  const { rows } = await sql<{
+  const { rows } = await sql.query<{
     ts: Date | string;
     hype_balance: number | string;
     entry_notional: number | string;
-  }>`
-    /* buyback:latest-balance */
+  }>(
+    `
+    ${freshReadMarker("buyback:latest-balance")}
     SELECT ts, hype_balance::float AS hype_balance, entry_notional::float AS entry_notional
     FROM hl_buyback_balance_snapshots
     ORDER BY ts DESC
     LIMIT 1
-  `;
+  `
+  );
 
   const row = rows[0];
   if (!row) return null;

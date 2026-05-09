@@ -1,5 +1,5 @@
 import { sql } from "@vercel/postgres";
-import type { HistoryPoint, Market, ProtocolSlug } from "@/lib/types";
+import { DELTA_PERIODS, DELTA_PERIOD_HOURS, type HistoryPoint, type Market, type ProtocolSlug } from "@/lib/types";
 import { pctChange, toNumber } from "@/lib/utils";
 
 export function isPostgresConfigured() {
@@ -64,23 +64,26 @@ type LatestSnapshotRow = {
   volume24h_usd: number | string | null;
 };
 
+const SNAPSHOT_DELTA_WINDOWS = [
+  ...DELTA_PERIODS.map((period) => ({
+    period,
+    hours: DELTA_PERIOD_HOURS[period]
+  })),
+  { period: "7d" as const, hours: 168 }
+] as const;
+
 type SnapshotDeltaRow = {
   symbol: string;
-  oi_1h: number | string | null;
-  oi_24h: number | string | null;
-  oi_7d: number | string | null;
-  volume_1h: number | string | null;
-  volume_24h: number | string | null;
-  volume_7d: number | string | null;
+  period: SnapshotDeltaPeriod;
+  oi_value: number | string | null;
+  volume_value: number | string | null;
 };
 
+type SnapshotDeltaPeriod = (typeof SNAPSHOT_DELTA_WINDOWS)[number]["period"];
+
 type SnapshotDelta = {
-  oi1h: number | null;
-  oi24h: number | null;
-  oi7d: number | null;
-  volume1h: number | null;
-  volume24h: number | null;
-  volume7d: number | null;
+  oi: Partial<Record<SnapshotDeltaPeriod, number | null>>;
+  volume: Partial<Record<SnapshotDeltaPeriod, number | null>>;
 };
 
 type SnapshotPayloadRow = {
@@ -232,102 +235,61 @@ async function getSnapshotDeltaMap(protocol: ProtocolSlug, symbols: string[]) {
   if (!isPostgresConfigured() || !uniqueSymbols.length) return empty;
 
   const payload = JSON.stringify(uniqueSymbols.map((symbol) => ({ symbol })));
+  const windows = JSON.stringify(
+    SNAPSHOT_DELTA_WINDOWS.map((window) => ({
+      ...window,
+      max_age: window.hours + maxSnapshotStalenessHours(window.hours)
+    }))
+  );
   const { rows } = await sql.query<SnapshotDeltaRow>(
     `
     ${freshReadMarker("oi:snapshot-delta-map")}
     WITH requested AS (
       SELECT symbol
       FROM jsonb_to_recordset($1::jsonb) AS item(symbol TEXT)
+    ),
+    windows AS (
+      SELECT period, hours, max_age
+      FROM jsonb_to_recordset($2::jsonb) AS item(
+        period TEXT,
+        hours INT,
+        max_age INT
+      )
     )
     SELECT
       requested.symbol,
-      oi_1h.value AS oi_1h,
-      oi_24h.value AS oi_24h,
-      oi_7d.value AS oi_7d,
-      volume_1h.value AS volume_1h,
-      volume_24h.value AS volume_24h,
-      volume_7d.value AS volume_7d
+      windows.period,
+      snapshot.oi_value,
+      snapshot.volume_value
     FROM requested
+    CROSS JOIN windows
     LEFT JOIN LATERAL (
-      SELECT oi_usd::float AS value
+      SELECT
+        oi_usd::float AS oi_value,
+        volume24h_usd::float AS volume_value
       FROM oi_snapshots
-      WHERE protocol = $2
+      WHERE protocol = $3
         AND symbol = requested.symbol
-        AND ts <= NOW() - (1 * INTERVAL '1 hour')
-        AND ts >= NOW() - (2 * INTERVAL '1 hour')
+        AND ts <= NOW() - (windows.hours * INTERVAL '1 hour')
+        AND ts >= NOW() - (windows.max_age * INTERVAL '1 hour')
       ORDER BY ts DESC
       LIMIT 1
-    ) oi_1h ON TRUE
-    LEFT JOIN LATERAL (
-      SELECT oi_usd::float AS value
-      FROM oi_snapshots
-      WHERE protocol = $2
-        AND symbol = requested.symbol
-        AND ts <= NOW() - (24 * INTERVAL '1 hour')
-        AND ts >= NOW() - (27 * INTERVAL '1 hour')
-      ORDER BY ts DESC
-      LIMIT 1
-    ) oi_24h ON TRUE
-    LEFT JOIN LATERAL (
-      SELECT oi_usd::float AS value
-      FROM oi_snapshots
-      WHERE protocol = $2
-        AND symbol = requested.symbol
-        AND ts <= NOW() - (168 * INTERVAL '1 hour')
-        AND ts >= NOW() - (180 * INTERVAL '1 hour')
-      ORDER BY ts DESC
-      LIMIT 1
-    ) oi_7d ON TRUE
-    LEFT JOIN LATERAL (
-      SELECT volume24h_usd::float AS value
-      FROM oi_snapshots
-      WHERE protocol = $2
-        AND symbol = requested.symbol
-        AND volume24h_usd IS NOT NULL
-        AND ts <= NOW() - (1 * INTERVAL '1 hour')
-        AND ts >= NOW() - (2 * INTERVAL '1 hour')
-      ORDER BY ts DESC
-      LIMIT 1
-    ) volume_1h ON TRUE
-    LEFT JOIN LATERAL (
-      SELECT volume24h_usd::float AS value
-      FROM oi_snapshots
-      WHERE protocol = $2
-        AND symbol = requested.symbol
-        AND volume24h_usd IS NOT NULL
-        AND ts <= NOW() - (24 * INTERVAL '1 hour')
-        AND ts >= NOW() - (27 * INTERVAL '1 hour')
-      ORDER BY ts DESC
-      LIMIT 1
-    ) volume_24h ON TRUE
-    LEFT JOIN LATERAL (
-      SELECT volume24h_usd::float AS value
-      FROM oi_snapshots
-      WHERE protocol = $2
-        AND symbol = requested.symbol
-        AND volume24h_usd IS NOT NULL
-        AND ts <= NOW() - (168 * INTERVAL '1 hour')
-        AND ts >= NOW() - (180 * INTERVAL '1 hour')
-      ORDER BY ts DESC
-      LIMIT 1
-    ) volume_7d ON TRUE
+    ) snapshot ON TRUE
   `,
-    [payload, protocol]
+    [payload, windows, protocol]
   );
 
-  return new Map(
-    rows.map((row) => [
-      row.symbol,
-      {
-        oi1h: row.oi_1h == null ? null : toNumber(row.oi_1h),
-        oi24h: row.oi_24h == null ? null : toNumber(row.oi_24h),
-        oi7d: row.oi_7d == null ? null : toNumber(row.oi_7d),
-        volume1h: row.volume_1h == null ? null : toNumber(row.volume_1h),
-        volume24h: row.volume_24h == null ? null : toNumber(row.volume_24h),
-        volume7d: row.volume_7d == null ? null : toNumber(row.volume_7d)
-      }
-    ])
-  );
+  const deltaMap = new Map<string, SnapshotDelta>();
+
+  rows.forEach((row) => {
+    const delta = deltaMap.get(row.symbol) ?? { oi: {}, volume: {} };
+    delta.oi[row.period] = row.oi_value == null ? null : toNumber(row.oi_value);
+    delta.volume[row.period] =
+      row.volume_value == null ? null : toNumber(row.volume_value);
+    deltaMap.set(row.symbol, delta);
+  });
+
+  return deltaMap;
 }
 
 export async function attachOiDeltas(markets: Market[]) {
@@ -349,23 +311,40 @@ export async function attachOiDeltas(markets: Market[]) {
 
   return markets.map((market) => {
     const delta = deltaMaps.get(market.protocol)?.get(market.symbol);
+    const oi = delta?.oi;
+    const volume = delta?.volume;
     return {
       ...market,
-      oiDelta1hPct: delta?.oi1h == null ? null : pctChange(market.oi, delta.oi1h),
-      oiDelta24hPct: delta?.oi24h == null ? null : pctChange(market.oi, delta.oi24h),
-      oiDelta7dPct: delta?.oi7d == null ? null : pctChange(market.oi, delta.oi7d),
-      oiDelta1hUsd: valueDelta(market.oi, delta?.oi1h),
-      oiDelta24hUsd: valueDelta(market.oi, delta?.oi24h),
-      oiDelta7dUsd: valueDelta(market.oi, delta?.oi7d),
+      oiDelta1hPct: oi?.["1h"] == null ? null : pctChange(market.oi, oi["1h"]),
+      oiDelta4hPct: oi?.["4h"] == null ? null : pctChange(market.oi, oi["4h"]),
+      oiDelta8hPct: oi?.["8h"] == null ? null : pctChange(market.oi, oi["8h"]),
+      oiDelta12hPct: oi?.["12h"] == null ? null : pctChange(market.oi, oi["12h"]),
+      oiDelta24hPct: oi?.["24h"] == null ? null : pctChange(market.oi, oi["24h"]),
+      oiDelta7dPct: oi?.["7d"] == null ? null : pctChange(market.oi, oi["7d"]),
+      oiDelta1hUsd: valueDelta(market.oi, oi?.["1h"]),
+      oiDelta4hUsd: valueDelta(market.oi, oi?.["4h"]),
+      oiDelta8hUsd: valueDelta(market.oi, oi?.["8h"]),
+      oiDelta12hUsd: valueDelta(market.oi, oi?.["12h"]),
+      oiDelta24hUsd: valueDelta(market.oi, oi?.["24h"]),
+      oiDelta7dUsd: valueDelta(market.oi, oi?.["7d"]),
       volumeDelta1hPct:
-        delta?.volume1h == null ? null : pctChange(market.volume24h, delta.volume1h),
+        volume?.["1h"] == null ? null : pctChange(market.volume24h, volume["1h"]),
+      volumeDelta4hPct:
+        volume?.["4h"] == null ? null : pctChange(market.volume24h, volume["4h"]),
+      volumeDelta8hPct:
+        volume?.["8h"] == null ? null : pctChange(market.volume24h, volume["8h"]),
+      volumeDelta12hPct:
+        volume?.["12h"] == null ? null : pctChange(market.volume24h, volume["12h"]),
       volumeDelta24hPct:
-        delta?.volume24h == null ? null : pctChange(market.volume24h, delta.volume24h),
+        volume?.["24h"] == null ? null : pctChange(market.volume24h, volume["24h"]),
       volumeDelta7dPct:
-        delta?.volume7d == null ? null : pctChange(market.volume24h, delta.volume7d),
-      volumeDelta1hUsd: valueDelta(market.volume24h, delta?.volume1h),
-      volumeDelta24hUsd: valueDelta(market.volume24h, delta?.volume24h),
-      volumeDelta7dUsd: valueDelta(market.volume24h, delta?.volume7d)
+        volume?.["7d"] == null ? null : pctChange(market.volume24h, volume["7d"]),
+      volumeDelta1hUsd: valueDelta(market.volume24h, volume?.["1h"]),
+      volumeDelta4hUsd: valueDelta(market.volume24h, volume?.["4h"]),
+      volumeDelta8hUsd: valueDelta(market.volume24h, volume?.["8h"]),
+      volumeDelta12hUsd: valueDelta(market.volume24h, volume?.["12h"]),
+      volumeDelta24hUsd: valueDelta(market.volume24h, volume?.["24h"]),
+      volumeDelta7dUsd: valueDelta(market.volume24h, volume?.["7d"])
     };
   });
 }

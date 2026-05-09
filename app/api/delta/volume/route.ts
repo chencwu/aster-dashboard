@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getVolumeDeltaLeaderboard } from "@/lib/data";
 import { getPrecomputedPayload, type PrecomputedKey } from "@/lib/db/precomputed";
-import type { ApiOk, DeltaLeaderboardItem, DeltaPeriod, DeltaSortMode } from "@/lib/types";
+import { isDeltaPeriod, type ApiOk, type DeltaLeaderboardItem, type DeltaPeriod, type DeltaSortMode } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
 function parsePeriod(value: string | null): DeltaPeriod {
-  if (value === "1h" || value === "7d") return value;
+  if (isDeltaPeriod(value)) return value;
   return "24h";
 }
 

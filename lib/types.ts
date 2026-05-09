@@ -33,16 +33,28 @@ export type Market = {
   oiBase: number;
   oi: number;
   oiDelta1hPct: number | null;
+  oiDelta4hPct: number | null;
+  oiDelta8hPct: number | null;
+  oiDelta12hPct: number | null;
   oiDelta24hPct: number | null;
   oiDelta7dPct: number | null;
   oiDelta1hUsd: number | null;
+  oiDelta4hUsd: number | null;
+  oiDelta8hUsd: number | null;
+  oiDelta12hUsd: number | null;
   oiDelta24hUsd: number | null;
   oiDelta7dUsd: number | null;
   volume24h: number;
   volumeDelta1hPct: number | null;
+  volumeDelta4hPct: number | null;
+  volumeDelta8hPct: number | null;
+  volumeDelta12hPct: number | null;
   volumeDelta24hPct: number | null;
   volumeDelta7dPct: number | null;
   volumeDelta1hUsd: number | null;
+  volumeDelta4hUsd: number | null;
+  volumeDelta8hUsd: number | null;
+  volumeDelta12hUsd: number | null;
   volumeDelta24hUsd: number | null;
   volumeDelta7dUsd: number | null;
   fundingRate: number;
@@ -77,7 +89,21 @@ export type SymbolCompare = {
   hyperliquid: Market | null;
 };
 
-export type DeltaPeriod = "1h" | "24h" | "7d";
+export const DELTA_PERIODS = ["1h", "4h", "8h", "12h", "24h"] as const;
+
+export type DeltaPeriod = (typeof DELTA_PERIODS)[number];
+
+export const DELTA_PERIOD_HOURS: Record<DeltaPeriod, number> = {
+  "1h": 1,
+  "4h": 4,
+  "8h": 8,
+  "12h": 12,
+  "24h": 24
+};
+
+export function isDeltaPeriod(value: string | null): value is DeltaPeriod {
+  return DELTA_PERIODS.includes(value as DeltaPeriod);
+}
 
 export type DeltaSortMode = "pct" | "amount";
 

@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { fetchJson } from "@/lib/client-fetch";
 import { PROTOCOLS } from "@/lib/protocols";
-import type { DeltaLeaderboardItem, DeltaPeriod, DeltaSortMode } from "@/lib/types";
+import { DELTA_PERIODS, type DeltaLeaderboardItem, type DeltaPeriod, type DeltaSortMode } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { formatPct, formatUsd } from "@/lib/format";
 
@@ -26,7 +26,6 @@ type Props = {
   description: string;
 };
 
-const periods: DeltaPeriod[] = ["1h", "24h", "7d"];
 const modes: Array<{ value: DeltaSortMode; label: string }> = [
   { value: "pct", label: "百分比" },
   { value: "amount", label: "按量 U" }
@@ -68,7 +67,7 @@ export function DeltaLeaderboard({ metric, title, description }: Props) {
           </div>
           <div className="flex flex-wrap justify-start gap-2 sm:justify-end">
             <div className="flex gap-2">
-              {periods.map((item) => (
+              {DELTA_PERIODS.map((item) => (
                 <Button
                   key={item}
                   size="sm"

@@ -17,6 +17,7 @@ import type {
   Protocol,
   ProtocolSlug
 } from "@/lib/types";
+import { DELTA_PERIODS, DELTA_PERIOD_HOURS } from "@/lib/types";
 import { attachMarketData } from "@/lib/sources/market-data";
 import {
   attachOiDeltas,
@@ -125,26 +126,38 @@ export async function getProtocols(): Promise<Protocol[]> {
 
 function pickVolumeDelta(market: Market, period: DeltaPeriod) {
   if (period === "1h") return market.volumeDelta1hPct;
+  if (period === "4h") return market.volumeDelta4hPct;
+  if (period === "8h") return market.volumeDelta8hPct;
+  if (period === "12h") return market.volumeDelta12hPct;
   if (period === "24h") return market.volumeDelta24hPct;
-  return market.volumeDelta7dPct;
+  return null;
 }
 
 function pickOiDelta(market: Market, period: DeltaPeriod) {
   if (period === "1h") return market.oiDelta1hPct;
+  if (period === "4h") return market.oiDelta4hPct;
+  if (period === "8h") return market.oiDelta8hPct;
+  if (period === "12h") return market.oiDelta12hPct;
   if (period === "24h") return market.oiDelta24hPct;
-  return market.oiDelta7dPct;
+  return null;
 }
 
 function pickVolumeDeltaUsd(market: Market, period: DeltaPeriod) {
   if (period === "1h") return market.volumeDelta1hUsd;
+  if (period === "4h") return market.volumeDelta4hUsd;
+  if (period === "8h") return market.volumeDelta8hUsd;
+  if (period === "12h") return market.volumeDelta12hUsd;
   if (period === "24h") return market.volumeDelta24hUsd;
-  return market.volumeDelta7dUsd;
+  return null;
 }
 
 function pickOiDeltaUsd(market: Market, period: DeltaPeriod) {
   if (period === "1h") return market.oiDelta1hUsd;
+  if (period === "4h") return market.oiDelta4hUsd;
+  if (period === "8h") return market.oiDelta8hUsd;
+  if (period === "12h") return market.oiDelta12hUsd;
   if (period === "24h") return market.oiDelta24hUsd;
-  return market.oiDelta7dUsd;
+  return null;
 }
 
 function sortDeltaItems(items: DeltaLeaderboardItem[], mode: DeltaSortMode) {
@@ -219,8 +232,9 @@ async function volumeDeltaForMarket(
   market: Market,
   period: DeltaPeriod
 ): Promise<DeltaLeaderboardItem> {
-  const interval: HistoryInterval = period === "7d" ? "1d" : "1h";
-  const limit = period === "1h" ? 3 : period === "24h" ? 48 : 14;
+  const interval: HistoryInterval = "1h";
+  const periodHours = DELTA_PERIOD_HOURS[period];
+  const limit = period === "1h" ? 3 : periodHours * 2;
   const history = await fetchVolumeHistory(market.protocol, market.symbol, interval, limit);
   const { current, previous } = splitWindow(history, period);
 
@@ -297,23 +311,23 @@ function countKnown(markets: Market[], pick: (market: Market) => number | null) 
 }
 
 export function getMarketsQuality(markets: Market[]): MarketsQuality {
+  const coverage = <T extends number | null>(pick: (market: Market) => T) =>
+    countKnown(markets, pick);
+
   return {
     deltaSource: isPostgresConfigured() ? "postgres_snapshots" : "not_configured",
     marketCount: markets.length,
-    maxSnapshotStalenessHours: {
-      "1h": 1,
-      "24h": 3,
-      "7d": 12
-    },
-    oiDeltaCoverage: {
-      "1h": countKnown(markets, (market) => market.oiDelta1hPct),
-      "24h": countKnown(markets, (market) => market.oiDelta24hPct),
-      "7d": countKnown(markets, (market) => market.oiDelta7dPct)
-    },
-    volumeDeltaCoverage: {
-      "1h": countKnown(markets, (market) => market.volumeDelta1hPct),
-      "24h": countKnown(markets, (market) => market.volumeDelta24hPct),
-      "7d": countKnown(markets, (market) => market.volumeDelta7dPct)
-    }
+    maxSnapshotStalenessHours: Object.fromEntries(
+      DELTA_PERIODS.map((period) => [period, period === "1h" ? 1 : 3])
+    ) as Record<DeltaPeriod, number>,
+    oiDeltaCoverage: Object.fromEntries(
+      DELTA_PERIODS.map((period) => [period, coverage((market) => pickOiDelta(market, period))])
+    ) as Record<DeltaPeriod, number>,
+    volumeDeltaCoverage: Object.fromEntries(
+      DELTA_PERIODS.map((period) => [
+        period,
+        coverage((market) => pickVolumeDelta(market, period))
+      ])
+    ) as Record<DeltaPeriod, number>
   };
 }

@@ -1,23 +1,15 @@
 import { sql } from "@vercel/postgres";
 import { isPostgresConfigured } from "@/lib/db/oi-history";
+import type { DeltaPeriod, DeltaSortMode } from "@/lib/types";
+
+type DeltaMetric = "oi" | "volume";
 
 export type PrecomputedKey =
   | "stats"
   | "protocols"
   | "markets:aster"
   | "markets:hyperliquid"
-  | "delta:oi:1h:pct"
-  | "delta:oi:24h:pct"
-  | "delta:oi:7d:pct"
-  | "delta:oi:1h:amount"
-  | "delta:oi:24h:amount"
-  | "delta:oi:7d:amount"
-  | "delta:volume:1h:pct"
-  | "delta:volume:24h:pct"
-  | "delta:volume:7d:pct"
-  | "delta:volume:1h:amount"
-  | "delta:volume:24h:amount"
-  | "delta:volume:7d:amount";
+  | `delta:${DeltaMetric}:${DeltaPeriod}:${DeltaSortMode}`;
 
 type PrecomputedPayloadRow = {
   payload: unknown;

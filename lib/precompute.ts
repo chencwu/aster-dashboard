@@ -8,14 +8,13 @@ import {
 } from "@/lib/data";
 import { attachOiDeltas } from "@/lib/db/oi-history";
 import { setPrecomputedPayloads, type PrecomputedKey } from "@/lib/db/precomputed";
-import type { DeltaPeriod, DeltaSortMode, Market, ProtocolSlug } from "@/lib/types";
+import { DELTA_PERIODS, type DeltaPeriod, type DeltaSortMode, type Market, type ProtocolSlug } from "@/lib/types";
 
 type RefreshInput = {
   asterMarkets?: Market[];
   hyperliquidMarkets?: Market[];
 };
 
-const periods: DeltaPeriod[] = ["1h", "24h", "7d"];
 const deltaSortModes: DeltaSortMode[] = ["pct", "amount"];
 
 function isDisplayableMarket(protocol: ProtocolSlug, market: Market) {
@@ -85,7 +84,7 @@ export async function refreshPrecomputedPayloads(input: RefreshInput = {}) {
         quality: getMarketsQuality(hyperliquid)
       }
     },
-    ...periods.flatMap((period) =>
+    ...DELTA_PERIODS.flatMap((period) =>
       deltaSortModes.flatMap((mode) => {
         const oiItems = getOiDeltaLeaderboardFromMarkets(allMarkets, period, mode);
         const volumeItems = getVolumeDeltaLeaderboardFromMarkets(allMarkets, period, mode);

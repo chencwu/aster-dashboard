@@ -95,8 +95,8 @@
 |---|---|
 | OI 历史曲线 | 每个币种支持 1H / 12H / 1D / 3D / 7D 多时间档 OI 走势 |
 | Volume 历史曲线 | 每个币种相同时间档 Volume 走势 |
-| OI Δ 排行榜 | 按 1h / 24h / 7d 三档 OI 增长率或增加量 U 倒序，找出"正在被堆仓"的币种 |
-| Volume Δ 排行榜 | 按 1h / 24h / 7d 三档 Volume 增长率或增加量 U 倒序，找出"突然爆量"的币种 |
+| OI Δ 排行榜 | 按 1h / 4h / 8h / 12h / 24h 五档 OI 增长率或增加量 U 倒序，找出"正在被堆仓"的币种 |
+| Volume Δ 排行榜 | 按 1h / 4h / 8h / 12h / 24h 五档 Volume 增长率或增加量 U 倒序，找出"突然爆量"的币种 |
 | 异动提示 | OI 24h Δ > +50% 或 < -30%、Volume 24h Δ > +200% 时高亮 |
 
 ### 6. 不做的功能（已确认排除）
@@ -191,7 +191,7 @@ app/
    ├─ compare/[symbol]/route.ts            跨平台单币种对比
    ├─ history/oi/[protocol]/[symbol]/route.ts        单币种 OI 历史（查 Postgres）
    ├─ history/volume/[protocol]/[symbol]/route.ts    单币种 Volume 历史（查 K-line）
-   ├─ delta/oi/route.ts                    OI Δ 排行（1h/24h/7d）
+   ├─ delta/oi/route.ts                    OI Δ 排行（1h/4h/8h/12h/24h）
    ├─ delta/volume/route.ts                Volume Δ 排行
    ├─ buyback/hyperliquid/route.ts         AF 回购 KPI / 日序列 / 余额序列
    ├─ oi-debug/route.ts                    OI Postgres 调试端点（参数化 vs 字面量 vs make_interval 多种 SQL 形式对比，用于排查 plan-cache 类问题）
@@ -255,16 +255,28 @@ type Market = {
   change24hPct: number;
   oi: number;                  // USD
   oiDelta1hPct: number | null; // null = 数据未累积足够
+  oiDelta4hPct: number | null;
+  oiDelta8hPct: number | null;
+  oiDelta12hPct: number | null;
   oiDelta24hPct: number | null;
   oiDelta7dPct: number | null;
   oiDelta1hUsd: number | null;
+  oiDelta4hUsd: number | null;
+  oiDelta8hUsd: number | null;
+  oiDelta12hUsd: number | null;
   oiDelta24hUsd: number | null;
   oiDelta7dUsd: number | null;
   volume24h: number;           // USD
   volumeDelta1hPct: number;
+  volumeDelta4hPct: number;
+  volumeDelta8hPct: number;
+  volumeDelta12hPct: number;
   volumeDelta24hPct: number;
   volumeDelta7dPct: number;
   volumeDelta1hUsd: number | null;
+  volumeDelta4hUsd: number | null;
+  volumeDelta8hUsd: number | null;
+  volumeDelta12hUsd: number | null;
   volumeDelta24hUsd: number | null;
   volumeDelta7dUsd: number | null;
   fundingRate: number;
@@ -305,7 +317,7 @@ CREATE TABLE oi_snapshots (
 CREATE INDEX idx_oi_snapshots_lookup ON oi_snapshots (protocol, symbol, ts DESC);
 
 CREATE TABLE precomputed_payloads (
-  key TEXT PRIMARY KEY,              -- stats / protocols / markets:aster / delta:oi:24h:pct / delta:oi:24h:amount 等
+  key TEXT PRIMARY KEY,              -- stats / protocols / markets:aster / delta:oi:12h:pct / delta:oi:24h:amount 等
   generated_at TIMESTAMPTZ NOT NULL,
   payload JSONB NOT NULL             -- 前端 API 直接返回的 JSON payload
 );

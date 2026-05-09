@@ -78,9 +78,15 @@ export function CoinDescription({ symbol }: Props) {
 
   const profile = query.data?.profile;
 
-  if (!normalizedSymbol || (!query.isLoading && !profile && !query.isError)) {
+  if (!normalizedSymbol) {
     return null;
   }
+
+  const fallbackDescription = query.isError
+    ? "币种资料暂时加载失败，稍后会自动重试。"
+    : query.isLoading || query.isFetching
+      ? "加载币种简介..."
+      : "CoinGecko 暂无可用币种简介，稍后会自动重试。";
 
   return (
     <Card>
@@ -105,8 +111,7 @@ export function CoinDescription({ symbol }: Props) {
               <Badge>CoinGecko</Badge>
             </div>
             <p className="max-w-5xl text-sm leading-6 text-muted-foreground">
-              {profile?.description ??
-                (query.isError ? "币种资料暂时加载失败，稍后会自动重试。" : "加载币种简介...")}
+              {profile?.description ?? fallbackDescription}
             </p>
             {profile ? (
               <div className="grid max-w-2xl grid-cols-1 gap-2 pt-2 sm:grid-cols-3">

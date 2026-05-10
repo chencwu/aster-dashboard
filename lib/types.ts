@@ -130,6 +130,26 @@ export type DeltaLeaderboardItem = {
   markPrice?: number;
 };
 
+export type AlertSignal = "oi_spike" | "oi_drop" | "volume_spike";
+
+export type AlertSeverity = "low" | "medium" | "high";
+
+export type AlertItem = {
+  id: string;
+  protocol: ProtocolSlug;
+  symbol: string;
+  ts: number;
+  previousTs: number;
+  signal: AlertSignal;
+  severity: AlertSeverity;
+  deltaUsd: number;
+  deltaPct: number;
+  thresholdUsd: number;
+  currentValue: number;
+  previousValue: number;
+  snapshotGapMinutes: number;
+};
+
 export type ApiOk<T> = T & {
   ok: true;
   generatedAt: number;

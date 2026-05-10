@@ -27,6 +27,29 @@ CREATE TABLE IF NOT EXISTS precomputed_payloads (
 CREATE INDEX IF NOT EXISTS idx_precomputed_payloads_generated_at
   ON precomputed_payloads (generated_at DESC);
 
+CREATE TABLE IF NOT EXISTS alert_events (
+  id TEXT PRIMARY KEY,
+  protocol TEXT NOT NULL,
+  symbol TEXT NOT NULL,
+  ts TIMESTAMPTZ NOT NULL,
+  previous_ts TIMESTAMPTZ NOT NULL,
+  signal TEXT NOT NULL,
+  severity TEXT NOT NULL,
+  delta_usd NUMERIC NOT NULL,
+  delta_pct NUMERIC NOT NULL,
+  threshold_usd NUMERIC NOT NULL,
+  current_value NUMERIC NOT NULL,
+  previous_value NUMERIC NOT NULL,
+  snapshot_gap_minutes NUMERIC NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_alert_events_ts
+  ON alert_events (ts DESC);
+
+CREATE INDEX IF NOT EXISTS idx_alert_events_symbol_ts
+  ON alert_events (symbol, ts DESC);
+
 CREATE TABLE IF NOT EXISTS hl_buyback_fills (
   tid TEXT PRIMARY KEY,
   hash TEXT NOT NULL,

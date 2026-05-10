@@ -1,5 +1,14 @@
 import { sql } from "@vercel/postgres";
-import { DELTA_PERIODS, DELTA_PERIOD_HOURS, type HistoryPoint, type Market, type ProtocolSlug } from "@/lib/types";
+import {
+  DELTA_PERIODS,
+  DELTA_PERIOD_HOURS,
+  type AlertItem,
+  type AlertSeverity,
+  type AlertSignal,
+  type HistoryPoint,
+  type Market,
+  type ProtocolSlug
+} from "@/lib/types";
 import { pctChange, toNumber } from "@/lib/utils";
 
 export function isPostgresConfigured() {
@@ -44,6 +53,7 @@ export async function ensureOiSchema() {
     CREATE INDEX IF NOT EXISTS idx_oi_snapshots_protocol_ts
       ON oi_snapshots (protocol, ts DESC)
   `;
+  await ensureAlertEventsSchema();
 
   return true;
 }
@@ -64,6 +74,34 @@ type LatestSnapshotRow = {
   mark_price: number | string | null;
   funding_rate: number | string | null;
   volume24h_usd: number | string | null;
+};
+
+type FiveMinuteAlertRow = {
+  protocol: ProtocolSlug;
+  symbol: string;
+  ts: number | string;
+  previous_ts: number | string;
+  oi_usd: number | string;
+  previous_oi_usd: number | string;
+  volume24h_usd: number | string | null;
+  previous_volume24h_usd: number | string | null;
+  gap_minutes: number | string;
+};
+
+type AlertEventRow = {
+  id: string;
+  protocol: ProtocolSlug;
+  symbol: string;
+  ts: number | string;
+  previous_ts: number | string;
+  signal: AlertSignal;
+  severity: AlertSeverity;
+  delta_usd: number | string;
+  delta_pct: number | string;
+  threshold_usd: number | string;
+  current_value: number | string;
+  previous_value: number | string;
+  snapshot_gap_minutes: number | string;
 };
 
 const SNAPSHOT_DELTA_WINDOWS = [
@@ -118,6 +156,342 @@ function valueDelta(current: number, previous: number | null | undefined) {
   }
 
   return current - previous;
+}
+
+export async function ensureAlertEventsSchema() {
+  if (!isPostgresConfigured()) return false;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS alert_events (
+      id TEXT PRIMARY KEY,
+      protocol TEXT NOT NULL,
+      symbol TEXT NOT NULL,
+      ts TIMESTAMPTZ NOT NULL,
+      previous_ts TIMESTAMPTZ NOT NULL,
+      signal TEXT NOT NULL,
+      severity TEXT NOT NULL,
+      delta_usd NUMERIC NOT NULL,
+      delta_pct NUMERIC NOT NULL,
+      threshold_usd NUMERIC NOT NULL,
+      current_value NUMERIC NOT NULL,
+      previous_value NUMERIC NOT NULL,
+      snapshot_gap_minutes NUMERIC NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS idx_alert_events_ts
+      ON alert_events (ts DESC)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS idx_alert_events_symbol_ts
+      ON alert_events (symbol, ts DESC)
+  `;
+
+  return true;
+}
+
+const ALERT_MIN_USD_THRESHOLD = 100_000;
+
+function dynamicThreshold(previousValue: number, ratio: number) {
+  if (!Number.isFinite(previousValue) || previousValue <= 0) {
+    return ALERT_MIN_USD_THRESHOLD;
+  }
+
+  return Math.max(ALERT_MIN_USD_THRESHOLD, previousValue * ratio);
+}
+
+function passesPositiveAlert(
+  deltaUsd: number,
+  deltaPct: number | null,
+  thresholdUsd: number,
+  minPct: number
+) {
+  return deltaPct != null && deltaUsd >= thresholdUsd && deltaPct >= minPct;
+}
+
+function passesNegativeAlert(
+  deltaUsd: number,
+  deltaPct: number | null,
+  thresholdUsd: number,
+  minPct: number
+) {
+  return deltaPct != null && deltaUsd <= -thresholdUsd && deltaPct <= -minPct;
+}
+
+function alertSeverity(deltaUsd: number, deltaPct: number): AlertSeverity {
+  const absolute = Math.abs(deltaUsd);
+  const absolutePct = Math.abs(deltaPct);
+
+  if (absolute >= 5_000_000 || absolutePct >= 15) return "high";
+  if (absolute >= 1_000_000 || absolutePct >= 8) return "medium";
+  return "low";
+}
+
+function buildAlertItem(
+  row: FiveMinuteAlertRow,
+  signal: AlertSignal,
+  deltaUsd: number,
+  deltaPct: number,
+  thresholdUsd: number,
+  currentValue: number,
+  previousValue: number
+): AlertItem {
+  const ts = toNumber(row.ts);
+
+  return {
+    id: `${row.protocol}:${row.symbol}:${signal}:${ts}`,
+    protocol: row.protocol,
+    symbol: row.symbol,
+    ts,
+    previousTs: toNumber(row.previous_ts),
+    signal,
+    severity: alertSeverity(deltaUsd, deltaPct),
+    deltaUsd,
+    deltaPct,
+    thresholdUsd,
+    currentValue,
+    previousValue,
+    snapshotGapMinutes: toNumber(row.gap_minutes)
+  };
+}
+
+export async function getFiveMinuteAlerts(limit = 100): Promise<AlertItem[]> {
+  if (!isPostgresConfigured()) return [];
+
+  const { rows } = await sql.query<FiveMinuteAlertRow>(
+    `
+    ${freshReadMarker("oi:five-minute-alerts")}
+    WITH ranked AS (
+      SELECT
+        protocol,
+        symbol,
+        ts,
+        oi_usd,
+        volume24h_usd,
+        ROW_NUMBER() OVER (
+          PARTITION BY protocol, symbol
+          ORDER BY ts DESC
+        ) AS rn
+      FROM oi_snapshots
+      WHERE protocol IN ('aster', 'hyperliquid')
+        AND ts >= NOW() - INTERVAL '30 minutes'
+        AND is_imputed = FALSE
+    )
+    SELECT
+      latest.protocol,
+      latest.symbol,
+      EXTRACT(EPOCH FROM latest.ts) * 1000 AS ts,
+      EXTRACT(EPOCH FROM previous.ts) * 1000 AS previous_ts,
+      latest.oi_usd::float AS oi_usd,
+      previous.oi_usd::float AS previous_oi_usd,
+      latest.volume24h_usd::float AS volume24h_usd,
+      previous.volume24h_usd::float AS previous_volume24h_usd,
+      EXTRACT(EPOCH FROM (latest.ts - previous.ts)) / 60 AS gap_minutes
+    FROM ranked latest
+    JOIN ranked previous
+      ON previous.protocol = latest.protocol
+      AND previous.symbol = latest.symbol
+      AND previous.rn = 2
+    WHERE latest.rn = 1
+      AND latest.ts >= NOW() - INTERVAL '15 minutes'
+      AND latest.ts - previous.ts <= INTERVAL '10 minutes'
+    `,
+    []
+  );
+
+  const alerts = rows.flatMap((row) => {
+    const oi = toNumber(row.oi_usd);
+    const previousOi = toNumber(row.previous_oi_usd);
+    const volume = toNumber(row.volume24h_usd, Number.NaN);
+    const previousVolume = toNumber(row.previous_volume24h_usd, Number.NaN);
+    const oiDelta = oi - previousOi;
+    const volumeDelta = volume - previousVolume;
+    const oiDeltaPct = pctChange(oi, previousOi);
+    const volumeDeltaPct = pctChange(volume, previousVolume);
+    const oiThresholdUsd = dynamicThreshold(previousOi, 0.005);
+    const volumeThresholdUsd = dynamicThreshold(previousVolume, 0.01);
+    const items: AlertItem[] = [];
+
+    if (passesPositiveAlert(oiDelta, oiDeltaPct, oiThresholdUsd, 2)) {
+      items.push(buildAlertItem(row, "oi_spike", oiDelta, oiDeltaPct!, oiThresholdUsd, oi, previousOi));
+    }
+    if (passesNegativeAlert(oiDelta, oiDeltaPct, oiThresholdUsd, 2)) {
+      items.push(buildAlertItem(row, "oi_drop", oiDelta, oiDeltaPct!, oiThresholdUsd, oi, previousOi));
+    }
+    if (
+      Number.isFinite(volumeDelta) &&
+      passesPositiveAlert(volumeDelta, volumeDeltaPct, volumeThresholdUsd, 5)
+    ) {
+      items.push(
+        buildAlertItem(
+          row,
+          "volume_spike",
+          volumeDelta,
+          volumeDeltaPct!,
+          volumeThresholdUsd,
+          volume,
+          previousVolume
+        )
+      );
+    }
+
+    return items;
+  });
+
+  return alerts
+    .sort((left, right) => {
+      if (right.ts !== left.ts) return right.ts - left.ts;
+      return Math.abs(right.deltaUsd) - Math.abs(left.deltaUsd);
+    })
+    .slice(0, Math.max(1, Math.min(limit, 200)));
+}
+
+function alertEventRowToItem(row: AlertEventRow): AlertItem {
+  return {
+    id: row.id,
+    protocol: row.protocol,
+    symbol: row.symbol,
+    ts: toNumber(row.ts),
+    previousTs: toNumber(row.previous_ts),
+    signal: row.signal,
+    severity: row.severity,
+    deltaUsd: toNumber(row.delta_usd),
+    deltaPct: toNumber(row.delta_pct),
+    thresholdUsd: toNumber(row.threshold_usd),
+    currentValue: toNumber(row.current_value),
+    previousValue: toNumber(row.previous_value),
+    snapshotGapMinutes: toNumber(row.snapshot_gap_minutes)
+  };
+}
+
+export async function insertFiveMinuteAlertEvents(limit = 200) {
+  if (!isPostgresConfigured()) return { inserted: 0, evaluated: 0 };
+
+  await ensureAlertEventsSchema();
+
+  const alerts = await getFiveMinuteAlerts(limit);
+  if (!alerts.length) return { inserted: 0, evaluated: 0 };
+
+  const payload = JSON.stringify(
+    alerts.map((item) => ({
+      id: item.id,
+      protocol: item.protocol,
+      symbol: item.symbol,
+      ts: new Date(item.ts).toISOString(),
+      previous_ts: new Date(item.previousTs).toISOString(),
+      signal: item.signal,
+      severity: item.severity,
+      delta_usd: item.deltaUsd,
+      delta_pct: item.deltaPct,
+      threshold_usd: item.thresholdUsd,
+      current_value: item.currentValue,
+      previous_value: item.previousValue,
+      snapshot_gap_minutes: item.snapshotGapMinutes
+    }))
+  );
+
+  const { rows } = await sql.query<{ inserted: number | string }>(
+    `
+    WITH payload AS (
+      SELECT *
+      FROM jsonb_to_recordset($1::jsonb) AS item(
+        id TEXT,
+        protocol TEXT,
+        symbol TEXT,
+        ts TIMESTAMPTZ,
+        previous_ts TIMESTAMPTZ,
+        signal TEXT,
+        severity TEXT,
+        delta_usd NUMERIC,
+        delta_pct NUMERIC,
+        threshold_usd NUMERIC,
+        current_value NUMERIC,
+        previous_value NUMERIC,
+        snapshot_gap_minutes NUMERIC
+      )
+    ),
+    inserted AS (
+      INSERT INTO alert_events (
+        id,
+        protocol,
+        symbol,
+        ts,
+        previous_ts,
+        signal,
+        severity,
+        delta_usd,
+        delta_pct,
+        threshold_usd,
+        current_value,
+        previous_value,
+        snapshot_gap_minutes
+      )
+      SELECT
+        id,
+        protocol,
+        symbol,
+        ts,
+        previous_ts,
+        signal,
+        severity,
+        delta_usd,
+        delta_pct,
+        threshold_usd,
+        current_value,
+        previous_value,
+        snapshot_gap_minutes
+      FROM payload
+      ON CONFLICT (id) DO NOTHING
+      RETURNING 1
+    )
+    SELECT COUNT(*) AS inserted
+    FROM inserted
+    `,
+    [payload]
+  );
+
+  const inserted = Math.max(0, toNumber(rows[0]?.inserted));
+  if (inserted > 0) {
+    await sql`ANALYZE alert_events`;
+  }
+
+  return { inserted, evaluated: alerts.length };
+}
+
+export async function getRecentAlertEvents(hours = 24, limit = 200): Promise<AlertItem[]> {
+  if (!isPostgresConfigured()) return [];
+
+  await ensureAlertEventsSchema();
+
+  const safeHours = Math.max(1, Math.min(Math.floor(hours), 24 * 30));
+  const safeLimit = Math.max(1, Math.min(Math.floor(limit), 500));
+  const { rows } = await sql.query<AlertEventRow>(
+    `
+    ${freshReadMarker("alerts:recent-events")}
+    SELECT
+      id,
+      protocol,
+      symbol,
+      EXTRACT(EPOCH FROM ts) * 1000 AS ts,
+      EXTRACT(EPOCH FROM previous_ts) * 1000 AS previous_ts,
+      signal,
+      severity,
+      delta_usd::float AS delta_usd,
+      delta_pct::float AS delta_pct,
+      threshold_usd::float AS threshold_usd,
+      current_value::float AS current_value,
+      previous_value::float AS previous_value,
+      snapshot_gap_minutes::float AS snapshot_gap_minutes
+    FROM alert_events
+    WHERE ts >= NOW() - ($1::int * INTERVAL '1 hour')
+    ORDER BY ts DESC, ABS(delta_usd) DESC
+    LIMIT $2
+    `,
+    [safeHours, safeLimit]
+  );
+
+  return rows.map(alertEventRowToItem);
 }
 
 export async function getOiHistory(

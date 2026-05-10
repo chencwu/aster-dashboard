@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getMarkets } from "@/lib/data";
-import { insertOiSnapshots, isPostgresConfigured } from "@/lib/db/oi-history";
+import {
+  insertFiveMinuteAlertEvents,
+  insertOiSnapshots,
+  isPostgresConfigured
+} from "@/lib/db/oi-history";
 import { refreshPrecomputedPayloads } from "@/lib/precompute";
 
 export const dynamic = "force-dynamic";
@@ -33,10 +37,13 @@ export async function GET(request: NextRequest) {
       insertOiSnapshots("aster", asterMarkets),
       insertOiSnapshots("hyperliquid", hyperliquidMarkets)
     ]);
-    const precomputed = await refreshPrecomputedPayloads({
-      asterMarkets,
-      hyperliquidMarkets
-    });
+    const [alerts, precomputed] = await Promise.all([
+      insertFiveMinuteAlertEvents(),
+      refreshPrecomputedPayloads({
+        asterMarkets,
+        hyperliquidMarkets
+      })
+    ]);
 
     return NextResponse.json({
       ok: true,
@@ -49,6 +56,7 @@ export async function GET(request: NextRequest) {
         aster: asterMarkets.length,
         hyperliquid: hyperliquidMarkets.length
       },
+      alerts,
       precomputed
     });
   } catch (error) {

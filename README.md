@@ -98,7 +98,7 @@
 | Volume 历史曲线 | 每个币种相同时间档 Volume 走势 |
 | OI Δ 排行榜 | 按 1h / 4h / 8h / 12h / 24h 五档 OI 增长率或增加量 U 倒序，找出"正在被堆仓"的币种 |
 | Volume Δ 排行榜 | 按 1h / 4h / 8h / 12h / 24h 五档 Volume 增长率或增加量 U 倒序，找出"突然爆量"的币种 |
-| 异动提示 | OI 24h Δ > +50% 或 < -30%、Volume 24h Δ > +200% 时高亮 |
+| 最近 24h 报警流 | 每次 5min Cron 将 Aster + Hyperliquid 的触发信号写入 `alert_events`；页面读取最近 24h 事件。OI 同时满足 `max($100K, 前值 * 0.5%)` 和 `2%`，Volume 同时满足 `max($100K, 前值 * 1%)` 和 `5%` 时输出文字报警 |
 
 ### 6. 不做的功能（已确认排除）
 
@@ -164,6 +164,7 @@
 | 前端读取预计算 payload | 60 秒轮询，后端计算不依赖前端请求 |
 | OI 快照写库 + stats/protocols/markets/delta 预计算（Cron） | 5 分钟 |
 | OI 快照读查询防 stale | `oi_snapshots` helper SELECT 每 60 秒刷新 SQL marker，避免长期运行进程复用凝固的 prepared/result |
+| 最近 24h 报警流 | 5min Cron 写入 `alert_events`；前端 60 秒轮询 `/api/alerts?hours=24` |
 | BN 单币种 OI 历史 | 60 秒前端轮询；后端直连 Binance `openInterestHist`，固定 5m 周期 |
 | 单币种 Volume 历史 K 线 | 5 分钟（按需查询，TanStack Query 缓存） |
 | 平台 Volume 走势 / Δ 排行 | 5 分钟（优先使用 Cron 快照） |
@@ -190,6 +191,8 @@ app/
 │  └─ page.tsx             单币种细分页（Tab + 全币种饼图 + 跨平台对比）
 ├─ tracker/
 │  └─ page.tsx             OI/Volume 增长追踪页（异动榜 + 历史曲线）
+├─ alerts/
+│  └─ page.tsx             最近 24h 报警流
 └─ api/
    ├─ stats/route.ts                       两平台总指标聚合
    ├─ protocols/route.ts                   平台明细 + 7D 序列
@@ -199,6 +202,7 @@ app/
    ├─ history/volume/[protocol]/[symbol]/route.ts    单币种 Volume 历史（查 K-line）
    ├─ delta/oi/route.ts                    OI Δ 排行（1h/4h/8h/12h/24h）
    ├─ delta/volume/route.ts                Volume Δ 排行
+   ├─ alerts/route.ts                      最近 24h OI / Volume 报警流
    ├─ buyback/hyperliquid/route.ts         AF 回购 KPI / 日序列 / 余额序列
    ├─ oi-debug/route.ts                    OI Postgres 调试端点（参数化 vs 字面量 vs make_interval 多种 SQL 形式对比，用于排查 plan-cache 类问题）
    ├─ cron/snapshot-oi/route.ts            每 5min 写 OI 快照并生成预计算 payload
@@ -327,6 +331,23 @@ CREATE TABLE precomputed_payloads (
   key TEXT PRIMARY KEY,              -- stats / protocols / markets:aster / delta:oi:12h:pct / delta:oi:24h:amount 等
   generated_at TIMESTAMPTZ NOT NULL,
   payload JSONB NOT NULL             -- 前端 API 直接返回的 JSON payload
+);
+
+CREATE TABLE alert_events (
+  id TEXT PRIMARY KEY,               -- protocol:symbol:signal:ts
+  protocol TEXT NOT NULL,
+  symbol TEXT NOT NULL,
+  ts TIMESTAMPTZ NOT NULL,
+  previous_ts TIMESTAMPTZ NOT NULL,
+  signal TEXT NOT NULL,              -- oi_spike / oi_drop / volume_spike
+  severity TEXT NOT NULL,            -- low / medium / high
+  delta_usd NUMERIC NOT NULL,
+  delta_pct NUMERIC NOT NULL,
+  threshold_usd NUMERIC NOT NULL,
+  current_value NUMERIC NOT NULL,
+  previous_value NUMERIC NOT NULL,
+  snapshot_gap_minutes NUMERIC NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Hyperliquid Assistance Fund 回购原始 fills（按 tid 去重）

@@ -98,7 +98,7 @@
 | Volume 历史曲线 | 每个币种相同时间档 Volume 走势 |
 | OI Δ 排行榜 | 按 1h / 4h / 8h / 12h / 24h 五档 OI 增长率或增加量 U 倒序，找出"正在被堆仓"的币种 |
 | Volume Δ 排行榜 | 按 1h / 4h / 8h / 12h / 24h 五档 Volume 增长率或增加量 U 倒序，找出"突然爆量"的币种 |
-| 最近 24h 报警流 | 每次 5min Cron 将 Aster + Hyperliquid 的触发信号写入 `alert_events`；页面读取最近 24h 事件。OI 同时满足 `max($100K, 前值 * 0.5%)` 和 `2%`，Volume 同时满足 `max($100K, 前值 * 1%)` 和 `5%` 时输出文字报警 |
+| 最近 24h 报警流 | 每次 5min Cron 将 Aster + Hyperliquid 的触发信号写入 `alert_events`；页面读取最近 24h 事件。OI 同时满足 `max($100K, 前值 * 0.5%)` 和 `2%`，Volume 同时满足 `max($100K, 前值 * 1%)` 和 `5%` 时输出文字报警；OI 报警会结合 5min 价格变化判断多头/空头加仓或平仓 |
 
 ### 6. 不做的功能（已确认排除）
 
@@ -346,6 +346,10 @@ CREATE TABLE alert_events (
   threshold_usd NUMERIC NOT NULL,
   current_value NUMERIC NOT NULL,
   previous_value NUMERIC NOT NULL,
+  current_mark_price NUMERIC,
+  previous_mark_price NUMERIC,
+  price_delta_pct NUMERIC,
+  direction TEXT NOT NULL DEFAULT 'unclear',
   snapshot_gap_minutes NUMERIC NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

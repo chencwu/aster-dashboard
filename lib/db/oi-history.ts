@@ -2,6 +2,7 @@ import { sql } from "@vercel/postgres";
 import {
   DELTA_PERIODS,
   DELTA_PERIOD_HOURS,
+  type AlertDirection,
   type AlertItem,
   type AlertSeverity,
   type AlertSignal,
@@ -83,6 +84,8 @@ type FiveMinuteAlertRow = {
   previous_ts: number | string;
   oi_usd: number | string;
   previous_oi_usd: number | string;
+  mark_price: number | string | null;
+  previous_mark_price: number | string | null;
   volume24h_usd: number | string | null;
   previous_volume24h_usd: number | string | null;
   gap_minutes: number | string;
@@ -101,6 +104,10 @@ type AlertEventRow = {
   threshold_usd: number | string;
   current_value: number | string;
   previous_value: number | string;
+  current_mark_price: number | string | null;
+  previous_mark_price: number | string | null;
+  price_delta_pct: number | string | null;
+  direction: AlertDirection | string | null;
   snapshot_gap_minutes: number | string;
 };
 
@@ -175,10 +182,18 @@ export async function ensureAlertEventsSchema() {
       threshold_usd NUMERIC NOT NULL,
       current_value NUMERIC NOT NULL,
       previous_value NUMERIC NOT NULL,
+      current_mark_price NUMERIC,
+      previous_mark_price NUMERIC,
+      price_delta_pct NUMERIC,
+      direction TEXT NOT NULL DEFAULT 'unclear',
       snapshot_gap_minutes NUMERIC NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `;
+  await sql`ALTER TABLE alert_events ADD COLUMN IF NOT EXISTS current_mark_price NUMERIC`;
+  await sql`ALTER TABLE alert_events ADD COLUMN IF NOT EXISTS previous_mark_price NUMERIC`;
+  await sql`ALTER TABLE alert_events ADD COLUMN IF NOT EXISTS price_delta_pct NUMERIC`;
+  await sql`ALTER TABLE alert_events ADD COLUMN IF NOT EXISTS direction TEXT NOT NULL DEFAULT 'unclear'`;
   await sql`
     CREATE INDEX IF NOT EXISTS idx_alert_events_ts
       ON alert_events (ts DESC)
@@ -228,6 +243,37 @@ function alertSeverity(deltaUsd: number, deltaPct: number): AlertSeverity {
   return "low";
 }
 
+const ALERT_PRICE_DIRECTION_THRESHOLD_PCT = 0.2;
+
+function alertDirection(signal: AlertSignal, priceDeltaPct: number | null): AlertDirection {
+  if (priceDeltaPct == null || Math.abs(priceDeltaPct) < ALERT_PRICE_DIRECTION_THRESHOLD_PCT) {
+    return "unclear";
+  }
+
+  if (signal === "oi_spike") {
+    return priceDeltaPct > 0 ? "long_build" : "short_build";
+  }
+
+  if (signal === "oi_drop") {
+    return priceDeltaPct > 0 ? "short_cover" : "long_unwind";
+  }
+
+  return "unclear";
+}
+
+function normalizeAlertDirection(value: AlertDirection | string | null): AlertDirection {
+  if (
+    value === "long_build" ||
+    value === "short_build" ||
+    value === "short_cover" ||
+    value === "long_unwind"
+  ) {
+    return value;
+  }
+
+  return "unclear";
+}
+
 function buildAlertItem(
   row: FiveMinuteAlertRow,
   signal: AlertSignal,
@@ -238,6 +284,9 @@ function buildAlertItem(
   previousValue: number
 ): AlertItem {
   const ts = toNumber(row.ts);
+  const currentMarkPrice = toNumber(row.mark_price, Number.NaN);
+  const previousMarkPrice = toNumber(row.previous_mark_price, Number.NaN);
+  const priceDeltaPct = pctChange(currentMarkPrice, previousMarkPrice);
 
   return {
     id: `${row.protocol}:${row.symbol}:${signal}:${ts}`,
@@ -252,6 +301,10 @@ function buildAlertItem(
     thresholdUsd,
     currentValue,
     previousValue,
+    currentMarkPrice: Number.isFinite(currentMarkPrice) ? currentMarkPrice : null,
+    previousMarkPrice: Number.isFinite(previousMarkPrice) ? previousMarkPrice : null,
+    priceDeltaPct,
+    direction: alertDirection(signal, priceDeltaPct),
     snapshotGapMinutes: toNumber(row.gap_minutes)
   };
 }
@@ -268,6 +321,7 @@ export async function getFiveMinuteAlerts(limit = 100): Promise<AlertItem[]> {
         symbol,
         ts,
         oi_usd,
+        mark_price,
         volume24h_usd,
         ROW_NUMBER() OVER (
           PARTITION BY protocol, symbol
@@ -285,6 +339,8 @@ export async function getFiveMinuteAlerts(limit = 100): Promise<AlertItem[]> {
       EXTRACT(EPOCH FROM previous.ts) * 1000 AS previous_ts,
       latest.oi_usd::float AS oi_usd,
       previous.oi_usd::float AS previous_oi_usd,
+      latest.mark_price::float AS mark_price,
+      previous.mark_price::float AS previous_mark_price,
       latest.volume24h_usd::float AS volume24h_usd,
       previous.volume24h_usd::float AS previous_volume24h_usd,
       EXTRACT(EPOCH FROM (latest.ts - previous.ts)) / 60 AS gap_minutes
@@ -348,6 +404,9 @@ export async function getFiveMinuteAlerts(limit = 100): Promise<AlertItem[]> {
 }
 
 function alertEventRowToItem(row: AlertEventRow): AlertItem {
+  const priceDeltaPct = row.price_delta_pct == null ? null : toNumber(row.price_delta_pct);
+  const storedDirection = normalizeAlertDirection(row.direction);
+
   return {
     id: row.id,
     protocol: row.protocol,
@@ -361,6 +420,10 @@ function alertEventRowToItem(row: AlertEventRow): AlertItem {
     thresholdUsd: toNumber(row.threshold_usd),
     currentValue: toNumber(row.current_value),
     previousValue: toNumber(row.previous_value),
+    currentMarkPrice: row.current_mark_price == null ? null : toNumber(row.current_mark_price),
+    previousMarkPrice: row.previous_mark_price == null ? null : toNumber(row.previous_mark_price),
+    priceDeltaPct,
+    direction: storedDirection === "unclear" ? alertDirection(row.signal, priceDeltaPct) : storedDirection,
     snapshotGapMinutes: toNumber(row.snapshot_gap_minutes)
   };
 }
@@ -387,6 +450,10 @@ export async function insertFiveMinuteAlertEvents(limit = 200) {
       threshold_usd: item.thresholdUsd,
       current_value: item.currentValue,
       previous_value: item.previousValue,
+      current_mark_price: item.currentMarkPrice,
+      previous_mark_price: item.previousMarkPrice,
+      price_delta_pct: item.priceDeltaPct,
+      direction: item.direction,
       snapshot_gap_minutes: item.snapshotGapMinutes
     }))
   );
@@ -408,6 +475,10 @@ export async function insertFiveMinuteAlertEvents(limit = 200) {
         threshold_usd NUMERIC,
         current_value NUMERIC,
         previous_value NUMERIC,
+        current_mark_price NUMERIC,
+        previous_mark_price NUMERIC,
+        price_delta_pct NUMERIC,
+        direction TEXT,
         snapshot_gap_minutes NUMERIC
       )
     ),
@@ -425,6 +496,10 @@ export async function insertFiveMinuteAlertEvents(limit = 200) {
         threshold_usd,
         current_value,
         previous_value,
+        current_mark_price,
+        previous_mark_price,
+        price_delta_pct,
+        direction,
         snapshot_gap_minutes
       )
       SELECT
@@ -440,9 +515,17 @@ export async function insertFiveMinuteAlertEvents(limit = 200) {
         threshold_usd,
         current_value,
         previous_value,
+        current_mark_price,
+        previous_mark_price,
+        price_delta_pct,
+        direction,
         snapshot_gap_minutes
       FROM payload
-      ON CONFLICT (id) DO NOTHING
+      ON CONFLICT (id) DO UPDATE SET
+        current_mark_price = EXCLUDED.current_mark_price,
+        previous_mark_price = EXCLUDED.previous_mark_price,
+        price_delta_pct = EXCLUDED.price_delta_pct,
+        direction = EXCLUDED.direction
       RETURNING 1
     )
     SELECT COUNT(*) AS inserted
@@ -459,16 +542,52 @@ export async function insertFiveMinuteAlertEvents(limit = 200) {
   return { inserted, evaluated: alerts.length };
 }
 
-export async function getRecentAlertEvents(hours = 24, limit = 200): Promise<AlertItem[]> {
+export async function getRecentAlertEvents(
+  hours = 24,
+  limit = 200,
+  symbol?: string | null
+): Promise<AlertItem[]> {
   if (!isPostgresConfigured()) return [];
 
   await ensureAlertEventsSchema();
 
   const safeHours = Math.max(1, Math.min(Math.floor(hours), 24 * 30));
   const safeLimit = Math.max(1, Math.min(Math.floor(limit), 500));
+  const normalizedSymbol = symbol?.trim().toUpperCase() || null;
   const { rows } = await sql.query<AlertEventRow>(
     `
     ${freshReadMarker("alerts:recent-events")}
+    WITH hydrated AS (
+      SELECT
+        events.id,
+        events.protocol,
+        events.symbol,
+        events.ts,
+        events.previous_ts,
+        events.signal,
+        events.severity,
+        events.delta_usd,
+        events.delta_pct,
+        events.threshold_usd,
+        events.current_value,
+        events.previous_value,
+        COALESCE(events.current_mark_price, current_snapshot.mark_price) AS current_mark_price,
+        COALESCE(events.previous_mark_price, previous_snapshot.mark_price) AS previous_mark_price,
+        events.price_delta_pct,
+        events.direction,
+        events.snapshot_gap_minutes
+      FROM alert_events events
+      LEFT JOIN oi_snapshots current_snapshot
+        ON current_snapshot.protocol = events.protocol
+        AND current_snapshot.symbol = events.symbol
+        AND current_snapshot.ts = events.ts
+      LEFT JOIN oi_snapshots previous_snapshot
+        ON previous_snapshot.protocol = events.protocol
+        AND previous_snapshot.symbol = events.symbol
+        AND previous_snapshot.ts = events.previous_ts
+      WHERE events.ts >= NOW() - ($1::int * INTERVAL '1 hour')
+        AND ($3::text IS NULL OR events.symbol = $3::text)
+    )
     SELECT
       id,
       protocol,
@@ -482,13 +601,23 @@ export async function getRecentAlertEvents(hours = 24, limit = 200): Promise<Ale
       threshold_usd::float AS threshold_usd,
       current_value::float AS current_value,
       previous_value::float AS previous_value,
+      current_mark_price::float AS current_mark_price,
+      previous_mark_price::float AS previous_mark_price,
+      COALESCE(
+        price_delta_pct,
+        CASE
+          WHEN previous_mark_price > 0
+            THEN ((current_mark_price - previous_mark_price) / previous_mark_price) * 100
+          ELSE NULL
+        END
+      )::float AS price_delta_pct,
+      direction,
       snapshot_gap_minutes::float AS snapshot_gap_minutes
-    FROM alert_events
-    WHERE ts >= NOW() - ($1::int * INTERVAL '1 hour')
+    FROM hydrated
     ORDER BY ts DESC, ABS(delta_usd) DESC
     LIMIT $2
     `,
-    [safeHours, safeLimit]
+    [safeHours, safeLimit, normalizedSymbol]
   );
 
   return rows.map(alertEventRowToItem);

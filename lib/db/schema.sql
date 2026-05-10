@@ -40,6 +40,10 @@ CREATE TABLE IF NOT EXISTS alert_events (
   threshold_usd NUMERIC NOT NULL,
   current_value NUMERIC NOT NULL,
   previous_value NUMERIC NOT NULL,
+  current_mark_price NUMERIC,
+  previous_mark_price NUMERIC,
+  price_delta_pct NUMERIC,
+  direction TEXT NOT NULL DEFAULT 'unclear',
   snapshot_gap_minutes NUMERIC NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

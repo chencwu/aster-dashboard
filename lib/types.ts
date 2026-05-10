@@ -134,6 +134,13 @@ export type AlertSignal = "oi_spike" | "oi_drop" | "volume_spike";
 
 export type AlertSeverity = "low" | "medium" | "high";
 
+export type AlertDirection =
+  | "long_build"
+  | "short_build"
+  | "short_cover"
+  | "long_unwind"
+  | "unclear";
+
 export type AlertItem = {
   id: string;
   protocol: ProtocolSlug;
@@ -147,6 +154,10 @@ export type AlertItem = {
   thresholdUsd: number;
   currentValue: number;
   previousValue: number;
+  currentMarkPrice: number | null;
+  previousMarkPrice: number | null;
+  priceDeltaPct: number | null;
+  direction: AlertDirection;
   snapshotGapMinutes: number;
 };
 

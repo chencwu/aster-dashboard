@@ -16,9 +16,15 @@ function parseHours(value: string | null) {
   return Math.min(Math.floor(parsed), 24 * 30);
 }
 
+function parseSymbol(value: string | null) {
+  const symbol = value?.trim().toUpperCase();
+  return symbol ? symbol.slice(0, 32) : null;
+}
+
 export async function GET(request: NextRequest) {
   const limit = parseLimit(request.nextUrl.searchParams.get("limit"));
   const hours = parseHours(request.nextUrl.searchParams.get("hours"));
+  const symbol = parseSymbol(request.nextUrl.searchParams.get("symbol"));
 
   if (!isPostgresConfigured()) {
     return NextResponse.json({
@@ -31,11 +37,12 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const items = await getRecentAlertEvents(hours, limit);
+    const items = await getRecentAlertEvents(hours, limit, symbol);
 
     return NextResponse.json<ApiOk<{
       status: "ready" | "quiet";
       hours: number;
+      symbol: string | null;
       items: AlertItem[];
       message: string | null;
     }>>({
@@ -43,8 +50,13 @@ export async function GET(request: NextRequest) {
       generatedAt: Date.now(),
       status: items.length ? "ready" : "quiet",
       hours,
+      symbol,
       items,
-      message: items.length ? null : `最近 ${hours}h 暂无已落库的报警。`
+      message: items.length
+        ? null
+        : symbol
+          ? `最近 ${hours}h 暂无 ${symbol} 已落库的报警。`
+          : `最近 ${hours}h 暂无已落库的报警。`
     });
   } catch (error) {
     return NextResponse.json(

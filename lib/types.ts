@@ -63,6 +63,8 @@ export type Market = {
 export type HistoryPoint = {
   ts: number;
   value: number;
+  baseValue?: number | null;
+  markPrice?: number | null;
   isImputed?: boolean;
   imputedReason?: string | null;
 };

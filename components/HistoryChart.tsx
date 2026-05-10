@@ -7,6 +7,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  ComposedChart,
   Line,
   LineChart,
   ResponsiveContainer,
@@ -17,7 +18,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { fetchJson } from "@/lib/client-fetch";
-import { formatUsd } from "@/lib/format";
+import { formatCompactNumber, formatUsd } from "@/lib/format";
 import type { HistoryPoint, ProtocolSlug } from "@/lib/types";
 
 type Range = "1h" | "12h" | "1d" | "3d" | "7d";
@@ -160,7 +161,7 @@ export function HistoryChart({ title, protocol, symbol, metric, description }: P
           </ResponsiveContainer>
         ) : (
           <ResponsiveContainer width="100%" height={288}>
-            <LineChart data={points}>
+            <ComposedChart data={points}>
               <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
               <XAxis
                 dataKey="ts"
@@ -169,24 +170,50 @@ export function HistoryChart({ title, protocol, symbol, metric, description }: P
                 axisLine={false}
                 minTickGap={28}
               />
-              <YAxis tickFormatter={(value) => formatUsd(Number(value))} tickLine={false} axisLine={false} />
+              <YAxis
+                yAxisId="left"
+                tickFormatter={(value) => formatUsd(Number(value))}
+                tickLine={false}
+                axisLine={false}
+              />
+              <YAxis
+                yAxisId="right"
+                orientation="right"
+                tickFormatter={(value) => formatCompactNumber(Number(value))}
+                tickLine={false}
+                axisLine={false}
+                width={52}
+              />
               <Tooltip
                 labelFormatter={(value) => formatTs(Number(value))}
-                formatter={(value, _name, item) => [
-                  formatUsd(Number(value)),
-                  item.payload?.isImputed
-                    ? `${metric.toUpperCase()} (复用上个点)`
-                    : metric.toUpperCase()
-                ]}
+                formatter={(value, _name, item) => {
+                  if (item.dataKey === "baseValue") {
+                    return [formatCompactNumber(Number(value)), "币本位数量"];
+                  }
+
+                  return [
+                    formatUsd(Number(value)),
+                    item.payload?.isImputed ? "OI(U本位，复用上个点)" : "OI(U本位)"
+                  ];
+                }}
                 contentStyle={{ background: "#111820", border: "1px solid #26323d", borderRadius: 8, color: "#eaf2f8" }}
                 labelStyle={{ color: "#eaf2f8" }}
                 itemStyle={{ color: "#eaf2f8" }}
+              />
+              <Bar
+                yAxisId="right"
+                dataKey="baseValue"
+                fill="rgba(245, 158, 11, 0.42)"
+                maxBarSize={10}
+                radius={[2, 2, 0, 0]}
+                isAnimationActive={false}
               />
               {hasImputedPoints
                 ? segments.map((segment) => (
                     <Line
                       key={segment.key}
                       data={segment.points}
+                      yAxisId="left"
                       type="linear"
                       dataKey="value"
                       stroke={segment.isImputed ? "#ff5c7a" : metricStroke(metric)}
@@ -197,6 +224,7 @@ export function HistoryChart({ title, protocol, symbol, metric, description }: P
                   ))
                 : (
                     <Line
+                      yAxisId="left"
                       type="monotone"
                       dataKey="value"
                       stroke={metricStroke(metric)}
@@ -205,7 +233,7 @@ export function HistoryChart({ title, protocol, symbol, metric, description }: P
                       isAnimationActive={false}
                     />
                   )}
-            </LineChart>
+            </ComposedChart>
           </ResponsiveContainer>
         )}
       </CardContent>

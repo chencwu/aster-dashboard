@@ -51,6 +51,8 @@ export async function ensureOiSchema() {
 type HistoryRow = {
   ts: number | string;
   value: number | string;
+  base_value?: number | string | null;
+  mark_price?: number | string | null;
   is_imputed?: boolean;
   imputed_reason?: string | null;
 };
@@ -131,6 +133,8 @@ export async function getOiHistory(
     SELECT
       EXTRACT(EPOCH FROM ts) * 1000 AS ts,
       oi_usd::float AS value,
+      COALESCE(oi_base::float, oi_usd::float / NULLIF(mark_price::float, 0)) AS base_value,
+      mark_price::float AS mark_price,
       is_imputed,
       imputed_reason
     FROM oi_snapshots
@@ -145,6 +149,8 @@ export async function getOiHistory(
   return rows.map((row) => ({
     ts: toNumber(row.ts),
     value: toNumber(row.value),
+    baseValue: row.base_value == null ? null : toNumber(row.base_value),
+    markPrice: row.mark_price == null ? null : toNumber(row.mark_price),
     isImputed: Boolean(row.is_imputed),
     imputedReason: row.imputed_reason ?? null
   }));

@@ -87,14 +87,14 @@
 选定一个 Symbol（如 BTC），并排展示 Aster vs Hyperliquid：
 - 当前 OI / Volume / Funding / Mark Price 差值
 - 币种简介（CoinGecko profile，含项目名、简述、Rank、Market Cap、FDV、Total Supply、官网）
-- **OI 历史曲线**（多时间档 1H / 12H / 1D / 3D / 7D）
+- **OI 历史曲线**（多时间档 1H / 12H / 1D / 3D / 7D；U 本位曲线 + 币本位柱图）
 - **Volume 历史曲线**（同上）
 
 #### 5.4 OI / Volume 增长追踪（核心）
 
 | 视图 | 内容 |
 |---|---|
-| OI 历史曲线 | 每个币种支持 1H / 12H / 1D / 3D / 7D 多时间档 OI 走势 |
+| OI 历史曲线 | 每个币种支持 1H / 12H / 1D / 3D / 7D 多时间档 OI 走势，左轴为 U 本位仓位曲线，右轴为币本位数量柱图 |
 | Volume 历史曲线 | 每个币种相同时间档 Volume 走势 |
 | OI Δ 排行榜 | 按 1h / 4h / 8h / 12h / 24h 五档 OI 增长率或增加量 U 倒序，找出"正在被堆仓"的币种 |
 | Volume Δ 排行榜 | 按 1h / 4h / 8h / 12h / 24h 五档 Volume 增长率或增加量 U 倒序，找出"突然爆量"的币种 |

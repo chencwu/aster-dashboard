@@ -29,6 +29,13 @@ type HyperliquidCandle = {
   v: string;
 };
 
+export class HyperliquidSymbolNotFoundError extends Error {
+  constructor(symbol: string) {
+    super(`Hyperliquid has no perp listing for ${symbol}`);
+    this.name = "HyperliquidSymbolNotFoundError";
+  }
+}
+
 async function postInfo<T>(body: object): Promise<T> {
   const response = await fetch(HYPERLIQUID_INFO_URL, {
     method: "POST",
@@ -42,6 +49,15 @@ async function postInfo<T>(body: object): Promise<T> {
   }
 
   return (await response.json()) as T;
+}
+
+async function assertHyperliquidListing(rawSymbol: string) {
+  const markets = await fetchHyperliquidMarkets();
+  const exists = markets.some((market) => market.rawSymbol === rawSymbol);
+
+  if (!exists) {
+    throw new HyperliquidSymbolNotFoundError(rawSymbol);
+  }
 }
 
 export async function fetchHyperliquidMarkets(): Promise<Market[]> {
@@ -118,6 +134,8 @@ export async function fetchHyperliquidVolumeHistory(
   const cacheKey = `hyperliquid:volume:${rawSymbol}:${interval}:${limit}`;
 
   return cached(cacheKey, 5 * 60_000, async () => {
+    await assertHyperliquidListing(rawSymbol);
+
     const candles = await postInfo<HyperliquidCandle[]>({
       type: "candleSnapshot",
       req: {
@@ -127,6 +145,10 @@ export async function fetchHyperliquidVolumeHistory(
         endTime
       }
     });
+
+    if (!Array.isArray(candles)) {
+      throw new HyperliquidSymbolNotFoundError(rawSymbol);
+    }
 
     return candles
       .map((candle) => {

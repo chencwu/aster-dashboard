@@ -84,7 +84,7 @@
 
 #### 5.3 跨平台单币种对比
 
-选定一个 Symbol（如 BTC），并排展示 Aster vs Hyperliquid：
+选定一个 Symbol（如 BTC），并排展示 BN / Aster / Hyperliquid：
 - 当前 OI / Volume / Funding / Mark Price 差值
 - 币种简介（CoinGecko profile，含项目名、简述、Rank、Market Cap、FDV、Total Supply、官网）
 - **OI 历史曲线**（多时间档 1H / 12H / 1D / 3D / 7D；U 本位曲线 + 币本位柱图）
@@ -94,7 +94,7 @@
 
 | 视图 | 内容 |
 |---|---|
-| OI 历史曲线 | 每个币种支持 1H / 12H / 1D / 3D / 7D 多时间档 OI 走势，左轴为 U 本位仓位曲线，右轴为币本位数量柱图 |
+| OI 历史曲线 | 每个币种支持 1H / 12H / 1D / 3D / 7D 多时间档 OI 走势；BN 直接读取 5m OI 历史，Aster / Hyperliquid 读取本地快照；左轴为 U 本位仓位曲线，右轴为币本位数量柱图 |
 | Volume 历史曲线 | 每个币种相同时间档 Volume 走势 |
 | OI Δ 排行榜 | 按 1h / 4h / 8h / 12h / 24h 五档 OI 增长率或增加量 U 倒序，找出"正在被堆仓"的币种 |
 | Volume Δ 排行榜 | 按 1h / 4h / 8h / 12h / 24h 五档 Volume 增长率或增加量 U 倒序，找出"突然爆量"的币种 |
@@ -120,8 +120,10 @@
 | Aster 单币种实时 OI(BASE) | `GET https://fapi.asterdex.com/fapi/v1/openInterest?symbol=BTCUSDT` | × markPrice 得 USD |
 | Aster Mark Price + Funding Rate | `GET .../fapi/v1/premiumIndex` | 全市场或按 symbol |
 | Aster 单币种 K 线（用于 Volume 历史） | `GET .../fapi/v1/klines?symbol=BTCUSDT&interval=1h&limit=...` | 第 8 字段 `quoteAssetVolume` 直接是 USD |
+| Binance 单币种 OI 历史 | `GET https://fapi.binance.com/futures/data/openInterestHist?symbol=BTCUSDT&period=5m` | 追踪页 BN OI 直连；`sumOpenInterestValue` 为 U 本位，`sumOpenInterest` 为币本位；单次最多 500，7D 会分段拉取 |
+| Binance 单币种 K 线（用于 Volume / 参考 K 线） | `GET https://fapi.binance.com/fapi/v1/klines?symbol=BTCUSDT&interval=5m&limit=...` | 第 8 字段 quote volume 直接是 USD |
 | CoinGecko 币种简介 | `GET /search?query=...` + `GET /coins/{id}` | 追踪页展示轻量 coin profile；免费 Basic/Demo key 填 `COINGECKO_API_KEY` / `CG_API_KEY`，Pro key 填 `COINGECKO_PRO_API_KEY` |
-| **OI 历史（两家）** | **本地 Postgres 落库**，每 5 分钟 Cron 写入快照 | API 都不返回历史 OI |
+| **Aster / Hyperliquid OI 历史** | **本地 Postgres 落库**，每 5 分钟 Cron 写入快照 | 这两家 API 不返回历史 OI |
 | Hyperliquid AF 买回成交 | `POST .../info` body `{"type":"userFillsByTime","user":"0xfefe…fefe","aggregateByTime":true}` | 过滤 `coin === "@107" && dir === "Buy"`，按 `tid` 去重，每 1 小时增量入库 |
 | Hyperliquid AF HYPE 余额 | `POST .../info` body `{"type":"spotClearinghouseState","user":"0xfefe…fefe"}` | 取 `balances[].coin === "HYPE"` 的 `total` 与 `entryNtl`，每 1 小时快照入库 |
 
@@ -133,7 +135,7 @@
 
 | | Volume | OI |
 |---|---|---|
-| 单币种历史曲线 | K-line API 直接查询，可任意回溯 | Cron + Postgres 自采 |
+| 单币种历史曲线 | K-line API 直接查询，可任意回溯 | BN 直接查 `openInterestHist` 5m 历史；Aster / Hyperliquid 用 Cron + Postgres 自采 |
 | 平台 7D / Δ 排行 | 优先用 Cron 落库的 `volume24h_usd` 快照，避免全市场逐币种拉 K 线 | Cron + Postgres 自采 |
 | 是否能回填历史 | 单币种 Volume ✅；平台快照序列 ❌ | ❌（API 不提供） |
 | 7D 曲线启动 | 单币种 Volume 立即可用；平台快照需累积 | 需自然累积 7 天 |
@@ -162,6 +164,7 @@
 | 前端读取预计算 payload | 60 秒轮询，后端计算不依赖前端请求 |
 | OI 快照写库 + stats/protocols/markets/delta 预计算（Cron） | 5 分钟 |
 | OI 快照读查询防 stale | `oi_snapshots` helper SELECT 每 60 秒刷新 SQL marker，避免长期运行进程复用凝固的 prepared/result |
+| BN 单币种 OI 历史 | 60 秒前端轮询；后端直连 Binance `openInterestHist`，固定 5m 周期 |
 | 单币种 Volume 历史 K 线 | 5 分钟（按需查询，TanStack Query 缓存） |
 | 平台 Volume 走势 / Δ 排行 | 5 分钟（优先使用 Cron 快照） |
 | Hyperliquid 回购数据写库 | 1 小时（增量抓 AF fills + 余额） |
@@ -221,6 +224,7 @@ lib/
 ├─ sources/
 │  ├─ hyperliquid.ts            实时取数 + K 线（Volume 历史）
 │  ├─ hyperliquid-buyback.ts    AF fills（userFillsByTime）+ AF 余额（spotClearinghouseState）
+│  ├─ binance.ts                BN 参考 K 线 + OI 5m 历史 + Volume 历史
 │  └─ aster.ts                  实时取数 + K 线（Volume 历史）
 ├─ db/
 │  ├─ schema.sql                oi_snapshots + precomputed_payloads + hl_buyback_* 表

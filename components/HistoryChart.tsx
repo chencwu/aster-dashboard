@@ -9,7 +9,6 @@ import {
   CartesianGrid,
   ComposedChart,
   Line,
-  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -21,7 +20,8 @@ import { fetchJson } from "@/lib/client-fetch";
 import { formatCompactNumber, formatUsd } from "@/lib/format";
 import type { HistoryPoint, ProtocolSlug } from "@/lib/types";
 
-type Range = "1h" | "12h" | "1d" | "3d" | "7d";
+export type HistoryRange = "1h" | "12h" | "1d" | "3d" | "7d";
+type HistoryProtocolSlug = ProtocolSlug | "binance";
 
 type HistoryResponse = {
   ok: true;
@@ -31,13 +31,15 @@ type HistoryResponse = {
 
 type Props = {
   title: string;
-  protocol: ProtocolSlug;
+  protocol: HistoryProtocolSlug;
   symbol: string;
   metric: "oi" | "volume";
   description?: string;
+  range?: HistoryRange;
+  onRangeChange?: (range: HistoryRange) => void;
 };
 
-const ranges: Array<{ value: Range; label: string }> = [
+const ranges: Array<{ value: HistoryRange; label: string }> = [
   { value: "1h", label: "1H" },
   { value: "12h", label: "12H" },
   { value: "1d", label: "1D" },
@@ -45,7 +47,7 @@ const ranges: Array<{ value: Range; label: string }> = [
   { value: "7d", label: "7D" }
 ];
 
-function volumeParams(range: Range) {
+function volumeParams(range: HistoryRange) {
   if (range === "1h") return { interval: "5m", limit: 13 };
   if (range === "12h") return { interval: "30m", limit: 25 };
   if (range === "1d") return { interval: "1h", limit: 25 };
@@ -53,7 +55,7 @@ function volumeParams(range: Range) {
   return { interval: "4h", limit: 43 };
 }
 
-function historyUrl(metric: "oi" | "volume", protocol: ProtocolSlug, symbol: string, range: Range) {
+function historyUrl(metric: "oi" | "volume", protocol: HistoryProtocolSlug, symbol: string, range: HistoryRange) {
   const encodedSymbol = encodeURIComponent(symbol);
 
   if (metric === "oi") {
@@ -88,8 +90,18 @@ function historySegments(points: HistoryPoint[]) {
   });
 }
 
-export function HistoryChart({ title, protocol, symbol, metric, description }: Props) {
-  const [range, setRange] = useState<Range>("7d");
+export function HistoryChart({
+  title,
+  protocol,
+  symbol,
+  metric,
+  description,
+  range: controlledRange,
+  onRangeChange
+}: Props) {
+  const [localRange, setLocalRange] = useState<HistoryRange>("7d");
+  const range = controlledRange ?? localRange;
+  const setRange = onRangeChange ?? setLocalRange;
   const url = useMemo(() => historyUrl(metric, protocol, symbol, range), [metric, protocol, range, symbol]);
   const query = useQuery({
     queryKey: ["history", metric, protocol, symbol, range],

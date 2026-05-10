@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
 import { CoinDescription } from "@/components/CoinDescription";
 import { HistoryChart } from "@/components/HistoryChart";
+import type { HistoryRange } from "@/components/HistoryChart";
 import { PriceChart } from "@/components/PriceChart";
 import { Input } from "@/components/ui/input";
 import { fetchJson } from "@/lib/client-fetch";
@@ -16,7 +17,13 @@ type MarketsResponse = {
   markets: Market[];
 };
 
-const PROTOCOL_SLUGS: ProtocolSlug[] = ["aster", "hyperliquid"];
+type TrackerProtocolSlug = ProtocolSlug | "binance";
+
+const TRACKER_PROTOCOLS: Array<{ slug: TrackerProtocolSlug; name: string }> = [
+  { slug: "binance", name: "BN" },
+  { slug: "aster", name: PROTOCOLS.aster.name },
+  { slug: "hyperliquid", name: PROTOCOLS.hyperliquid.name }
+];
 
 export default function TrackerPage() {
   return (
@@ -30,6 +37,7 @@ function TrackerContent() {
   const searchParams = useSearchParams();
   const urlSymbol = searchParams.get("symbol")?.trim().toUpperCase() || "BTC";
   const [symbol, setSymbol] = useState(urlSymbol);
+  const [historyRange, setHistoryRange] = useState<HistoryRange>("7d");
 
   useEffect(() => {
     setSymbol(urlSymbol);
@@ -61,7 +69,7 @@ function TrackerContent() {
         <div>
           <h1 className="text-2xl font-semibold">OI / Volume 增长追踪</h1>
           <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-            输入币种后会同时展示 Aster 与 Hyperliquid 上的 OI / Volume 历史；没有 Postgres 时 OI 区域会显示采集状态，币种在某平台未上线时该卡显示数据不足。
+            输入币种后会同时展示 BN、Aster 与 Hyperliquid 上的 OI / Volume 历史；BN 的 OI 直接读取 5m 历史，Aster 与 Hyperliquid 的 OI 来自本地快照。
           </p>
         </div>
         <div className="w-full sm:w-64">
@@ -81,25 +89,29 @@ function TrackerContent() {
 
       <CoinDescription symbol={activeSymbol} />
 
-      <section className="grid gap-4 lg:grid-cols-2">
-        {PROTOCOL_SLUGS.map((slug) => (
+      <section className="grid gap-4 xl:grid-cols-3">
+        {TRACKER_PROTOCOLS.map(({ slug, name }) => (
           <HistoryChart
             key={`${slug}-oi`}
-            title={`${PROTOCOLS[slug].name} · OI 历史曲线`}
+            title={`${name} · OI 历史曲线`}
             description={activeSymbol}
             protocol={slug}
             symbol={activeSymbol}
             metric="oi"
+            range={historyRange}
+            onRangeChange={setHistoryRange}
           />
         ))}
-        {PROTOCOL_SLUGS.map((slug) => (
+        {TRACKER_PROTOCOLS.map(({ slug, name }) => (
           <HistoryChart
             key={`${slug}-volume`}
-            title={`${PROTOCOLS[slug].name} · Volume 历史曲线`}
+            title={`${name} · Volume 历史曲线`}
             description={activeSymbol}
             protocol={slug}
             symbol={activeSymbol}
             metric="volume"
+            range={historyRange}
+            onRangeChange={setHistoryRange}
           />
         ))}
       </section>

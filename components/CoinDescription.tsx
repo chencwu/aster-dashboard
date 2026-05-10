@@ -37,7 +37,7 @@ function profileUrl(symbol: string) {
 
 function ProfileMetric({ label, value }: { label: string; value: number | null | undefined }) {
   return (
-    <div className="rounded-md border bg-background/50 px-3 py-2">
+    <div className="min-w-0 rounded-md border bg-background/50 px-3 py-2">
       <div className="text-[11px] font-medium uppercase tracking-normal text-muted-foreground">
         {label}
       </div>
@@ -48,7 +48,7 @@ function ProfileMetric({ label, value }: { label: string; value: number | null |
 
 function SupplyMetric({ value }: { value: number | null | undefined }) {
   return (
-    <div className="rounded-md border bg-background/50 px-3 py-2">
+    <div className="min-w-0 rounded-md border bg-background/50 px-3 py-2">
       <div className="text-[11px] font-medium uppercase tracking-normal text-muted-foreground">
         Total Supply
       </div>
@@ -90,7 +90,7 @@ export function CoinDescription({ symbol }: Props) {
 
   return (
     <Card>
-      <CardContent className="flex flex-col gap-3 p-4 md:flex-row md:items-start md:justify-between">
+      <CardContent className="grid gap-4 p-4 xl:grid-cols-[minmax(0,1fr)_minmax(320px,480px)]">
         <div className="flex min-w-0 gap-3">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-muted text-sm font-semibold text-muted-foreground">
             {profile?.imageUrl ? (
@@ -113,33 +113,33 @@ export function CoinDescription({ symbol }: Props) {
             <p className="max-w-5xl text-sm leading-6 text-muted-foreground">
               {profile?.description ?? fallbackDescription}
             </p>
-            {profile ? (
-              <div className="grid max-w-2xl grid-cols-1 gap-2 pt-2 sm:grid-cols-3">
-                <ProfileMetric label="Market Cap" value={profile.marketCap} />
-                <ProfileMetric label="FDV" value={profile.fdv} />
-                <SupplyMetric value={profile.totalSupply} />
-              </div>
-            ) : null}
-            {profile?.categories.length ? (
-              <div className="flex flex-wrap gap-2 pt-1">
-                {profile.categories.map((category) => (
-                  <Badge key={category}>{category}</Badge>
-                ))}
-              </div>
+          </div>
+        </div>
+        <div className="flex min-w-0 flex-col gap-3 xl:items-end">
+          {profile ? (
+            <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-3 xl:max-w-[480px]">
+              <ProfileMetric label="Market Cap" value={profile.marketCap} />
+              <ProfileMetric label="FDV" value={profile.fdv} />
+              <SupplyMetric value={profile.totalSupply} />
+            </div>
+          ) : null}
+          <div className="flex w-full flex-wrap gap-2 xl:max-w-[480px] xl:justify-end">
+            {profile?.categories.map((category) => (
+              <Badge key={category}>{category}</Badge>
+            ))}
+            {profile?.homepage ? (
+              <a
+                href={profile.homepage}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex h-7 items-center gap-1 rounded-md border bg-muted px-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+              >
+                官网
+                <ExternalLink className="h-3.5 w-3.5" />
+              </a>
             ) : null}
           </div>
         </div>
-        {profile?.homepage ? (
-          <a
-            href={profile.homepage}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex shrink-0 items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
-          >
-            官网
-            <ExternalLink className="h-4 w-4" />
-          </a>
-        ) : null}
       </CardContent>
     </Card>
   );

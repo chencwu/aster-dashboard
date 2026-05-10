@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchVolumeHistory } from "@/lib/data";
 import { isProtocolSlug } from "@/lib/protocols";
+import { AsterSymbolNotFoundError } from "@/lib/sources/aster";
+import { BinanceSymbolNotFoundError, fetchBinanceVolumeHistory } from "@/lib/sources/binance";
+import { HyperliquidSymbolNotFoundError } from "@/lib/sources/hyperliquid";
 import type { HistoryInterval } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -35,14 +38,52 @@ function parseLimit(value: string | null, fallback: number) {
 }
 
 export async function GET(request: NextRequest, { params }: Params) {
-  if (!isProtocolSlug(params.protocol)) {
-    return NextResponse.json({ ok: false, error: "Unknown protocol" }, { status: 404 });
-  }
-
   const interval = parseInterval(request.nextUrl.searchParams.get("interval"));
   const defaultLimit = interval === "1d" ? 30 : 168;
   const limit = parseLimit(request.nextUrl.searchParams.get("limit"), defaultLimit);
   const symbol = decodeURIComponent(params.symbol);
+
+  if (params.protocol === "binance") {
+    try {
+      const points = await fetchBinanceVolumeHistory(symbol, interval, limit);
+
+      return NextResponse.json({
+        ok: true,
+        generatedAt: Date.now(),
+        protocol: "binance",
+        symbol,
+        metric: "volume",
+        period: interval,
+        points,
+        message: points.length > 1 ? null : "Binance 未找到该币种的 USDT 永续成交额数据。"
+      });
+    } catch (error) {
+      if (error instanceof BinanceSymbolNotFoundError) {
+        return NextResponse.json({
+          ok: true,
+          generatedAt: Date.now(),
+          protocol: "binance",
+          symbol,
+          metric: "volume",
+          period: interval,
+          points: [],
+          message: "Binance 未找到该币种的 USDT 永续成交额数据。"
+        });
+      }
+
+      return NextResponse.json(
+        {
+          ok: false,
+          error: error instanceof Error ? error.message : "Failed to load Binance volume history"
+        },
+        { status: 500 }
+      );
+    }
+  }
+
+  if (!isProtocolSlug(params.protocol)) {
+    return NextResponse.json({ ok: false, error: "Unknown protocol" }, { status: 404 });
+  }
 
   try {
     const points = await fetchVolumeHistory(params.protocol, symbol, interval, limit);
@@ -57,6 +98,31 @@ export async function GET(request: NextRequest, { params }: Params) {
       points
     });
   } catch (error) {
+    if (error instanceof AsterSymbolNotFoundError) {
+      return NextResponse.json({
+        ok: true,
+        generatedAt: Date.now(),
+        protocol: params.protocol,
+        symbol,
+        metric: "volume",
+        period: interval,
+        points: [],
+        message: "Aster 未找到该币种的 USDT 永续成交额数据。"
+      });
+    }
+    if (error instanceof HyperliquidSymbolNotFoundError) {
+      return NextResponse.json({
+        ok: true,
+        generatedAt: Date.now(),
+        protocol: params.protocol,
+        symbol,
+        metric: "volume",
+        period: interval,
+        points: [],
+        message: "Hyperliquid 未找到该币种的永续成交额数据。"
+      });
+    }
+
     return NextResponse.json(
       {
         ok: false,

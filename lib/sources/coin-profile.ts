@@ -160,9 +160,8 @@ function pickSearchCoin(coins: CoinGeckoSearchCoin[], normalizedSymbol: string) 
   const exactMatches = coins.filter(
     (coin) => coin.symbol?.toLowerCase() === normalizedSymbol
   );
-  const candidates = exactMatches.length ? exactMatches : coins;
 
-  return [...candidates].sort((left, right) => {
+  return [...exactMatches].sort((left, right) => {
     const leftRank = left.market_cap_rank ?? Number.MAX_SAFE_INTEGER;
     const rightRank = right.market_cap_rank ?? Number.MAX_SAFE_INTEGER;
     return leftRank - rightRank;
@@ -221,7 +220,7 @@ async function fetchCoinProfileUncached(symbol: string): Promise<CoinProfile | n
 
 export async function fetchCoinProfile(symbol: string) {
   const normalizedSymbol = marketDataSymbol(symbol);
-  const cacheKey = `coin-profile:v3:${normalizedSymbol}`;
+  const cacheKey = `coin-profile:v4:${normalizedSymbol}`;
   const now = Date.now();
   const hit = coinProfileCache.get(cacheKey);
 

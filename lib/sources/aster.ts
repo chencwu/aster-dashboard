@@ -43,11 +43,34 @@ type FetchAsterMarketsOptions = {
   includeInvalidForSnapshot?: boolean;
 };
 
+export class AsterSymbolNotFoundError extends Error {
+  constructor(symbol: string) {
+    super(`Aster has no perp listing for ${symbol}`);
+    this.name = "AsterSymbolNotFoundError";
+  }
+}
+
 async function getJson<T>(path: string): Promise<T> {
   const response = await fetch(`${ASTER_FAPI_URL}${path}`, { cache: "no-store" });
 
   if (!response.ok) {
-    throw new Error(`Aster API failed: ${response.status} ${path}`);
+    const text = await response.text();
+    let parsed: { code?: number; msg?: string } | null = null;
+
+    try {
+      parsed = JSON.parse(text) as { code?: number; msg?: string };
+    } catch {
+      parsed = null;
+    }
+
+    if (
+      (response.status === 400 || response.status === 404) &&
+      (parsed?.code === -1121 || parsed?.msg?.toLowerCase().includes("invalid symbol"))
+    ) {
+      throw new AsterSymbolNotFoundError(path);
+    }
+
+    throw new Error(`Aster API failed: ${response.status} ${path}${text ? ` ${text}` : ""}`);
   }
 
   return (await response.json()) as T;

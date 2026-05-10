@@ -5,6 +5,7 @@ import {
   isPostgresConfigured
 } from "@/lib/db/oi-history";
 import { isProtocolSlug } from "@/lib/protocols";
+import { BinanceSymbolNotFoundError, fetchBinanceOiHistory } from "@/lib/sources/binance";
 
 export const dynamic = "force-dynamic";
 
@@ -24,12 +25,50 @@ function parseHours(value: string | null) {
 }
 
 export async function GET(request: NextRequest, { params }: Params) {
+  const symbol = decodeURIComponent(params.symbol);
+  const hours = parseHours(request.nextUrl.searchParams.get("range"));
+
+  if (params.protocol === "binance") {
+    try {
+      const points = await fetchBinanceOiHistory(symbol, hours);
+      const hasEnoughPoints = points.length > 1;
+
+      return NextResponse.json({
+        ok: true,
+        generatedAt: Date.now(),
+        protocol: "binance",
+        symbol,
+        metric: "oi",
+        points,
+        status: hasEnoughPoints ? "ready" : "insufficient_history",
+        message: hasEnoughPoints
+          ? null
+          : "Binance 当前时间档内还没有 OI 快照，可能是该币种未上线 USDT 永续。"
+      });
+    } catch (error) {
+      if (error instanceof BinanceSymbolNotFoundError) {
+        return NextResponse.json({
+          ok: true,
+          generatedAt: Date.now(),
+          protocol: "binance",
+          symbol,
+          metric: "oi",
+          points: [],
+          status: "not_listed",
+          message: "Binance 未找到该币种的 USDT 永续 OI 数据。"
+        });
+      }
+
+      return NextResponse.json(
+        { ok: false, error: error instanceof Error ? error.message : "Failed to load Binance OI history" },
+        { status: 500 }
+      );
+    }
+  }
+
   if (!isProtocolSlug(params.protocol)) {
     return NextResponse.json({ ok: false, error: "Unknown protocol" }, { status: 404 });
   }
-
-  const symbol = decodeURIComponent(params.symbol);
-  const hours = parseHours(request.nextUrl.searchParams.get("range"));
 
   if (!isPostgresConfigured()) {
     return NextResponse.json({

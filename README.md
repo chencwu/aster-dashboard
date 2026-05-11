@@ -166,6 +166,7 @@
 | OI 快照读查询防 stale | `oi_snapshots` helper SELECT 每 60 秒刷新 SQL marker，避免长期运行进程复用凝固的 prepared/result |
 | 最近 24h 报警流 | 5min Cron 写入 `alert_events`；前端 60 秒轮询 `/api/alerts?hours=24` |
 | BN 单币种 OI 历史 | 60 秒前端轮询；后端直连 Binance `openInterestHist`，固定 5m 周期 |
+| Binance 参考 K 线 | 60 秒前端轮询；周期按钮对应 K 线柱周期（`1m/5m/15m/30m/1h/4h/1d`），前端底部 Brush 支持横向拖动查看不同时间段 |
 | 单币种 Volume 历史 K 线 | 5 分钟（按需查询，TanStack Query 缓存） |
 | 平台 Volume 走势 / Δ 排行 | 5 分钟（优先使用 Cron 快照） |
 | Hyperliquid 回购数据写库 | 1 小时（增量抓 AF fills + 余额） |

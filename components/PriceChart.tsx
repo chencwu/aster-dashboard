@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Activity } from "lucide-react";
 import {
   Bar,
+  Brush,
   CartesianGrid,
   Cell,
   ComposedChart,
@@ -17,9 +18,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { fetchJson } from "@/lib/client-fetch";
 import { formatUsd } from "@/lib/format";
-import type { OhlcPoint } from "@/lib/types";
+import type { HistoryInterval, OhlcPoint } from "@/lib/types";
 
-type Range = "1h" | "12h" | "1d" | "3d" | "7d";
+type CandleInterval = Extract<HistoryInterval, "1m" | "5m" | "15m" | "30m" | "1h" | "4h" | "1d">;
+type BrushRange = {
+  startIndex: number;
+  endIndex: number;
+};
 
 type PriceResponse = {
   ok: true;
@@ -27,20 +32,20 @@ type PriceResponse = {
   message?: string | null;
 };
 
-const ranges: Array<{ value: Range; label: string }> = [
-  { value: "1h", label: "1H" },
-  { value: "12h", label: "12H" },
-  { value: "1d", label: "1D" },
-  { value: "3d", label: "3D" },
-  { value: "7d", label: "7D" }
+const intervals: Array<{ value: CandleInterval; label: string; limit: number; visibleCandles: number }> = [
+  { value: "1m", label: "1m", limit: 720, visibleCandles: 120 },
+  { value: "5m", label: "5m", limit: 720, visibleCandles: 120 },
+  { value: "15m", label: "15m", limit: 720, visibleCandles: 120 },
+  { value: "30m", label: "30m", limit: 720, visibleCandles: 120 },
+  { value: "1h", label: "1H", limit: 720, visibleCandles: 120 },
+  { value: "4h", label: "4H", limit: 720, visibleCandles: 90 },
+  { value: "1d", label: "1D", limit: 365, visibleCandles: 90 }
 ];
 
-function rangeParams(range: Range) {
-  if (range === "1h") return { interval: "5m", limit: 13 };
-  if (range === "12h") return { interval: "30m", limit: 25 };
-  if (range === "1d") return { interval: "1h", limit: 25 };
-  if (range === "3d") return { interval: "4h", limit: 19 };
-  return { interval: "4h", limit: 43 };
+const intervalMap = new Map(intervals.map((item) => [item.value, item]));
+
+function intervalConfig(interval: CandleInterval) {
+  return intervalMap.get(interval) ?? intervals[4];
 }
 
 function formatTs(ts: number) {
@@ -50,6 +55,22 @@ function formatTs(ts: number) {
     hour: "2-digit",
     minute: "2-digit"
   }).format(ts);
+}
+
+function formatBrushTs(ts: number | string) {
+  return new Intl.DateTimeFormat("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit"
+  }).format(Number(ts));
+}
+
+function initialBrushRange(length: number, interval: CandleInterval): BrushRange {
+  const visibleCandles = Math.min(intervalConfig(interval).visibleCandles, Math.max(1, length));
+  return {
+    startIndex: Math.max(0, length - visibleCandles),
+    endIndex: Math.max(0, length - 1)
+  };
 }
 
 const BULL = "#10b981";
@@ -122,14 +143,17 @@ function CandleTooltip({ active, label, payload }: CandleTooltipProps) {
 }
 
 export function PriceChart({ symbol }: { symbol: string }) {
-  const [range, setRange] = useState<Range>("1d");
+  const [interval, setInterval] = useState<CandleInterval>("1h");
+  const [brushByInterval, setBrushByInterval] = useState<Partial<Record<CandleInterval, BrushRange>>>({});
+  const rowLengthByIntervalRef = useRef<Partial<Record<CandleInterval, number>>>({});
+
   const url = useMemo(() => {
-    const params = rangeParams(range);
-    return `/api/history/price/${encodeURIComponent(symbol)}?interval=${params.interval}&limit=${params.limit}`;
-  }, [range, symbol]);
+    const config = intervalConfig(interval);
+    return `/api/history/price/${encodeURIComponent(symbol)}?interval=${interval}&limit=${config.limit}`;
+  }, [interval, symbol]);
 
   const query = useQuery({
-    queryKey: ["price", symbol, range],
+    queryKey: ["price", symbol, interval],
     queryFn: () => fetchJson<PriceResponse>(url),
     enabled: Boolean(symbol),
     refetchInterval: 60_000
@@ -145,6 +169,45 @@ export function PriceChart({ symbol }: { symbol: string }) {
     [query.data?.candles]
   );
   const hasData = rows.length > 1;
+  const brushRange = brushByInterval[interval] ?? initialBrushRange(rows.length, interval);
+
+  useEffect(() => {
+    if (!rows.length) return;
+
+    const previousLength = rowLengthByIntervalRef.current[interval] ?? 0;
+    rowLengthByIntervalRef.current[interval] = rows.length;
+
+    setBrushByInterval((current) => {
+      const brush = current[interval];
+      const wasAtLatest = !brush || previousLength === 0 || brush.endIndex >= previousLength - 1;
+      const isOutOfBounds = Boolean(
+        brush && (brush.startIndex >= rows.length || brush.endIndex >= rows.length)
+      );
+
+      if (!brush || wasAtLatest || isOutOfBounds) {
+        return {
+          ...current,
+          [interval]: initialBrushRange(rows.length, interval)
+        };
+      }
+
+      return current;
+    });
+  }, [interval, rows.length]);
+
+  function updateBrush(next?: { startIndex?: number; endIndex?: number }) {
+    if (next?.startIndex == null || next.endIndex == null) return;
+    const startIndex = next.startIndex;
+    const endIndex = next.endIndex;
+
+    setBrushByInterval((current) => ({
+      ...current,
+      [interval]: {
+        startIndex: Math.max(0, startIndex),
+        endIndex: Math.min(rows.length - 1, endIndex)
+      }
+    }));
+  }
 
   return (
     <Card>
@@ -152,15 +215,17 @@ export function PriceChart({ symbol }: { symbol: string }) {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <CardTitle>Binance · K 线</CardTitle>
-            <CardDescription>{symbol}USDT · Perp OHLC（中立参考价）</CardDescription>
+            <CardDescription>
+              {symbol}USDT · Perp OHLC · {intervalConfig(interval).label} K 线
+            </CardDescription>
           </div>
           <div className="flex flex-wrap gap-2">
-            {ranges.map((item) => (
+            {intervals.map((item) => (
               <Button
                 key={item.value}
                 size="sm"
-                variant={range === item.value ? "default" : "secondary"}
-                onClick={() => setRange(item.value)}
+                variant={interval === item.value ? "default" : "secondary"}
+                onClick={() => setInterval(item.value)}
               >
                 {item.label}
               </Button>
@@ -179,8 +244,8 @@ export function PriceChart({ symbol }: { symbol: string }) {
             {query.data?.message ?? "K 线数据不足，等待采集或换一个时间档。"}
           </div>
         ) : (
-          <ResponsiveContainer width="100%" height={360}>
-            <ComposedChart data={rows}>
+          <ResponsiveContainer width="100%" height={390}>
+            <ComposedChart data={rows} margin={{ top: 8, right: 12, bottom: 8, left: 0 }} barCategoryGap="22%">
               <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
               <XAxis
                 dataKey="ts"
@@ -206,6 +271,17 @@ export function PriceChart({ symbol }: { symbol: string }) {
                   <Cell key={index} fill={row.close >= row.open ? BULL : BEAR} />
                 ))}
               </Bar>
+              <Brush
+                dataKey="ts"
+                height={28}
+                startIndex={brushRange.startIndex}
+                endIndex={brushRange.endIndex}
+                onChange={updateBrush}
+                travellerWidth={9}
+                tickFormatter={formatBrushTs}
+                stroke="#1bdfa0"
+                fill="rgba(17,24,32,0.95)"
+              />
             </ComposedChart>
           </ResponsiveContainer>
         )}

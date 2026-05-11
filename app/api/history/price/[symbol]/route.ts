@@ -19,6 +19,7 @@ function parseInterval(value: string | null): HistoryInterval {
     value === "5m" ||
     value === "15m" ||
     value === "30m" ||
+    value === "1h" ||
     value === "4h" ||
     value === "8h" ||
     value === "1d"

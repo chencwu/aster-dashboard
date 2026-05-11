@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRecentAlertEvents, isPostgresConfigured } from "@/lib/db/oi-history";
+import { normalizeTrackerSymbol } from "@/lib/symbols";
 import type { AlertItem, ApiOk } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +20,7 @@ function parseHours(value: string | null, all: boolean) {
 }
 
 function parseSymbol(value: string | null) {
-  const symbol = value?.trim().toUpperCase();
+  const symbol = value ? normalizeTrackerSymbol(value) : "";
   return symbol ? symbol.slice(0, 32) : null;
 }
 

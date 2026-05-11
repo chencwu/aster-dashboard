@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { fetchJson } from "@/lib/client-fetch";
 import { formatUsd } from "@/lib/format";
+import { normalizeTrackerSymbol } from "@/lib/symbols";
 
 type CoinProfile = {
   id: string;
@@ -65,7 +66,7 @@ function SupplyMetric({ value }: { value: number | null | undefined }) {
 }
 
 export function CoinDescription({ symbol }: Props) {
-  const normalizedSymbol = symbol.trim().toUpperCase();
+  const normalizedSymbol = normalizeTrackerSymbol(symbol);
   const query = useQuery({
     queryKey: ["coin-profile", normalizedSymbol],
     queryFn: () => fetchJson<CoinProfileResponse>(profileUrl(normalizedSymbol)),

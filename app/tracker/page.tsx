@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { fetchJson } from "@/lib/client-fetch";
 import { PROTOCOLS } from "@/lib/protocols";
+import { normalizeTrackerSymbol } from "@/lib/symbols";
 import type { Market, ProtocolSlug } from "@/lib/types";
 
 type MarketsResponse = {
@@ -38,7 +39,7 @@ export default function TrackerPage() {
 
 function TrackerContent() {
   const searchParams = useSearchParams();
-  const urlSymbol = searchParams.get("symbol")?.trim().toUpperCase() || "BTC";
+  const urlSymbol = normalizeTrackerSymbol(searchParams.get("symbol") || "BTC");
   const [historyRange, setHistoryRange] = useState<HistoryRange>("7d");
 
   const asterQuery = useQuery({
@@ -129,7 +130,7 @@ function TrackerSymbolSearch({
 
   function submitSymbol(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const nextSymbol = symbolInput.trim().toUpperCase() || "BTC";
+    const nextSymbol = normalizeTrackerSymbol(symbolInput || "BTC");
     setSymbolInput(nextSymbol);
     router.replace(`/tracker?symbol=${encodeURIComponent(nextSymbol)}`);
   }
@@ -139,7 +140,7 @@ function TrackerSymbolSearch({
       <Input
         list="tracker-symbols"
         value={symbolInput}
-        onChange={(event) => setSymbolInput(event.target.value.trim().toUpperCase())}
+        onChange={(event) => setSymbolInput(event.target.value.trim())}
         placeholder="BTC"
       />
       <Button type="submit" variant="secondary" className="gap-2">

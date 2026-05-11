@@ -11,6 +11,7 @@ import {
   type ProtocolSlug
 } from "@/lib/types";
 import { pctChange, toNumber } from "@/lib/utils";
+import { symbolLookupAliases } from "@/lib/symbols";
 
 export function isPostgresConfigured() {
   return Boolean(
@@ -553,7 +554,7 @@ export async function getRecentAlertEvents(
 
   const safeHours = hours == null ? null : Math.max(1, Math.min(Math.floor(hours), 24 * 30));
   const safeLimit = limit == null ? null : Math.max(1, Math.min(Math.floor(limit), 5000));
-  const normalizedSymbol = symbol?.trim().toUpperCase() || null;
+  const symbolAliases = symbol ? symbolLookupAliases(symbol) : null;
   const { rows } = await sql.query<AlertEventRow>(
     `
     ${freshReadMarker("alerts:recent-events")}
@@ -586,7 +587,7 @@ export async function getRecentAlertEvents(
         AND previous_snapshot.symbol = events.symbol
         AND previous_snapshot.ts = events.previous_ts
       WHERE ($1::int IS NULL OR events.ts >= NOW() - ($1::int * INTERVAL '1 hour'))
-        AND ($3::text IS NULL OR events.symbol = $3::text)
+        AND ($3::text[] IS NULL OR events.symbol = ANY($3::text[]))
     )
     SELECT
       id,
@@ -617,7 +618,7 @@ export async function getRecentAlertEvents(
     ORDER BY ts DESC, ABS(delta_usd) DESC
     LIMIT $2
     `,
-    [safeHours, safeLimit, normalizedSymbol]
+    [safeHours, safeLimit, symbolAliases]
   );
 
   return rows.map(alertEventRowToItem);

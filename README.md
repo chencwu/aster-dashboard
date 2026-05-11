@@ -173,6 +173,19 @@
 | Hyperliquid 回购数据写库 | 1 小时（增量抓 AF fills + 余额） |
 | 总览页回购模块前端轮询 | 5 分钟 |
 
+### Symbol 别名
+
+Hyperliquid 的千单位合约使用 `k` 前缀；追踪页会自动映射到其他平台的对应名称：
+
+| Hyperliquid | Aster | Binance |
+|---|---|---|
+| `kBONK` | `1000BONK` | `1000BONK` |
+| `kFLOKI` | `1000FLOKI` | `1000FLOKI` |
+| `kLUNC` | `1000LUNC` | `1000LUNC` |
+| `kNEIRO` | `NEIRO` | `1000NEIRO` |
+| `kPEPE` | `1000PEPE` | `1000PEPE` |
+| `kSHIB` | `1000SHIB` | `1000SHIB` |
+
 ---
 
 ### 调试端点

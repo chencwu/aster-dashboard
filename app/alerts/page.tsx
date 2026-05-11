@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { fetchJson } from "@/lib/client-fetch";
 import { formatPct, formatUsd } from "@/lib/format";
 import { PROTOCOLS } from "@/lib/protocols";
+import { normalizeTrackerSymbol } from "@/lib/symbols";
 import { cn } from "@/lib/utils";
 import type { AlertDirection, AlertItem, AlertSignal } from "@/lib/types";
 
@@ -93,7 +94,7 @@ export default function AlertsPage() {
 function AlertsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const urlSymbol = searchParams.get("symbol")?.trim().toUpperCase() || "";
+  const urlSymbol = searchParams.get("symbol") ? normalizeTrackerSymbol(searchParams.get("symbol") || "") : "";
   const [symbolInput, setSymbolInput] = useState(urlSymbol);
 
   useEffect(() => {
@@ -115,7 +116,7 @@ function AlertsContent() {
 
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const nextSymbol = symbolInput.trim().toUpperCase();
+    const nextSymbol = normalizeTrackerSymbol(symbolInput);
     const params = new URLSearchParams(searchParams.toString());
 
     if (nextSymbol) {
@@ -148,7 +149,7 @@ function AlertsContent() {
             <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
               value={symbolInput}
-              onChange={(event) => setSymbolInput(event.target.value.trim().toUpperCase())}
+              onChange={(event) => setSymbolInput(event.target.value.trim())}
               placeholder="搜索 coin，如 DOGE"
               className="pl-9"
             />

@@ -6,6 +6,7 @@ import {
 } from "@/lib/db/oi-history";
 import { isProtocolSlug } from "@/lib/protocols";
 import { BinanceSymbolNotFoundError, fetchBinanceOiHistory } from "@/lib/sources/binance";
+import { toProtocolLookupSymbol } from "@/lib/symbols";
 
 export const dynamic = "force-dynamic";
 
@@ -85,9 +86,10 @@ export async function GET(request: NextRequest, { params }: Params) {
   }
 
   try {
+    const lookupSymbol = toProtocolLookupSymbol(params.protocol, symbol);
     const [points, collectionSummary] = await Promise.all([
-      getOiHistory(params.protocol, symbol, hours),
-      getCollectionSummary(params.protocol, symbol)
+      getOiHistory(params.protocol, lookupSymbol, hours),
+      getCollectionSummary(params.protocol, lookupSymbol)
     ]);
     const hasEnoughPoints = points.length > 1;
 

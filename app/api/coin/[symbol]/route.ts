@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { fetchCoinProfile } from "@/lib/sources/coin-profile";
+import { normalizeTrackerSymbol } from "@/lib/symbols";
 import type { CoinProfile } from "@/lib/sources/coin-profile";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +12,7 @@ type Params = {
 };
 
 export async function GET(_request: Request, { params }: Params) {
-  const symbol = decodeURIComponent(params.symbol).trim().toUpperCase();
+  const symbol = normalizeTrackerSymbol(decodeURIComponent(params.symbol));
 
   if (!symbol) {
     return NextResponse.json(

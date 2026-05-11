@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { fetchJson } from "@/lib/client-fetch";
 import { formatPct, formatUsd } from "@/lib/format";
 import { PROTOCOLS } from "@/lib/protocols";
+import { normalizeTrackerSymbol } from "@/lib/symbols";
 import { cn } from "@/lib/utils";
 import type { AlertDirection, AlertItem, AlertSignal } from "@/lib/types";
 
@@ -95,7 +96,7 @@ function severityClass(severity: AlertItem["severity"]) {
 }
 
 export function CoinAlertHistory({ symbol }: { symbol: string }) {
-  const normalizedSymbol = symbol.trim().toUpperCase();
+  const normalizedSymbol = normalizeTrackerSymbol(symbol);
   const [window, setWindow] = useState<AlertWindow>("7d");
 
   const url = useMemo(() => {

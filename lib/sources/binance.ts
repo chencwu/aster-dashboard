@@ -1,5 +1,5 @@
 import { cached } from "@/lib/cache";
-import { toAsterRawSymbol } from "@/lib/symbols";
+import { toBinanceRawSymbol } from "@/lib/symbols";
 import type { HistoryInterval, HistoryPoint, OhlcPoint } from "@/lib/types";
 import { toNumber } from "@/lib/utils";
 
@@ -57,7 +57,7 @@ export async function fetchBinanceOhlcHistory(
   interval: HistoryInterval = "1h",
   limit = 168
 ): Promise<OhlcPoint[]> {
-  const rawSymbol = toAsterRawSymbol(symbol);
+  const rawSymbol = toBinanceRawSymbol(symbol);
   const cacheKey = `binance:ohlc:${rawSymbol}:${interval}:${limit}`;
 
   return cached(cacheKey, 60_000, async () => {
@@ -81,7 +81,7 @@ export async function fetchBinanceVolumeHistory(
   interval: HistoryInterval = "1h",
   limit = 168
 ): Promise<HistoryPoint[]> {
-  const rawSymbol = toAsterRawSymbol(symbol);
+  const rawSymbol = toBinanceRawSymbol(symbol);
   const cacheKey = `binance:volume:${rawSymbol}:${interval}:${limit}`;
 
   return cached(cacheKey, 60_000, async () => {
@@ -123,7 +123,7 @@ export async function fetchBinanceOiHistory(
   symbol: string,
   hours = 168
 ): Promise<HistoryPoint[]> {
-  const rawSymbol = toAsterRawSymbol(symbol);
+  const rawSymbol = toBinanceRawSymbol(symbol);
   const safeHours = Math.max(1, Math.min(Math.floor(hours), 24 * 30));
   const cacheKey = `binance:oi:${rawSymbol}:${safeHours}h:${BINANCE_OI_PERIOD}`;
 

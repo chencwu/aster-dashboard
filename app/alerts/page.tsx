@@ -19,7 +19,7 @@ type AlertsResponse = {
   ok: true;
   generatedAt: number;
   status: "ready" | "quiet" | "not_configured";
-  hours?: number;
+  hours?: number | null;
   symbol?: string | null;
   items: AlertItem[];
   message?: string | null;

@@ -543,16 +543,16 @@ export async function insertFiveMinuteAlertEvents(limit = 200) {
 }
 
 export async function getRecentAlertEvents(
-  hours = 24,
-  limit = 200,
+  hours: number | null = 24,
+  limit: number | null = 200,
   symbol?: string | null
 ): Promise<AlertItem[]> {
   if (!isPostgresConfigured()) return [];
 
   await ensureAlertEventsSchema();
 
-  const safeHours = Math.max(1, Math.min(Math.floor(hours), 24 * 30));
-  const safeLimit = Math.max(1, Math.min(Math.floor(limit), 500));
+  const safeHours = hours == null ? null : Math.max(1, Math.min(Math.floor(hours), 24 * 30));
+  const safeLimit = limit == null ? null : Math.max(1, Math.min(Math.floor(limit), 5000));
   const normalizedSymbol = symbol?.trim().toUpperCase() || null;
   const { rows } = await sql.query<AlertEventRow>(
     `
@@ -585,7 +585,7 @@ export async function getRecentAlertEvents(
         ON previous_snapshot.protocol = events.protocol
         AND previous_snapshot.symbol = events.symbol
         AND previous_snapshot.ts = events.previous_ts
-      WHERE events.ts >= NOW() - ($1::int * INTERVAL '1 hour')
+      WHERE ($1::int IS NULL OR events.ts >= NOW() - ($1::int * INTERVAL '1 hour'))
         AND ($3::text IS NULL OR events.symbol = $3::text)
     )
     SELECT

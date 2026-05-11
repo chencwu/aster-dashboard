@@ -164,7 +164,8 @@
 | 前端读取预计算 payload | 60 秒轮询，后端计算不依赖前端请求 |
 | OI 快照写库 + stats/protocols/markets/delta 预计算（Cron） | 5 分钟 |
 | OI 快照读查询防 stale | `oi_snapshots` helper SELECT 每 60 秒刷新 SQL marker，避免长期运行进程复用凝固的 prepared/result |
-| 最近 24h 报警流 | 5min Cron 写入 `alert_events`；前端 60 秒轮询 `/api/alerts?hours=24` |
+| 最近 24h 报警流 | 5min Cron 写入 `alert_events`；前端 60 秒轮询 `/api/alerts?hours=24`。24h 只是报警页展示窗口，不会删除历史报警 |
+| 单币种历史报警 | 追踪页底部提供 `1D / 3D / 7D` 时间档，调用 `/api/alerts?symbol=BTC&hours=168&limit=5000` 展示该币种对应窗口内已保存的历史报警 |
 | BN 单币种 OI 历史 | 60 秒前端轮询；后端直连 Binance `openInterestHist`，固定 5m 周期 |
 | Binance 参考 K 线 | 60 秒前端轮询；周期按钮对应 K 线柱周期（`1m/5m/15m/30m/1h/4h/1d`），前端底部 Brush 支持横向拖动查看不同时间段 |
 | 单币种 Volume 历史 K 线 | 5 分钟（按需查询，TanStack Query 缓存） |

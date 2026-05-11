@@ -1,12 +1,15 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { ArrowRight } from "lucide-react";
+import { CoinAlertHistory } from "@/components/CoinAlertHistory";
 import { CoinDescription } from "@/components/CoinDescription";
 import { HistoryChart } from "@/components/HistoryChart";
 import type { HistoryRange } from "@/components/HistoryChart";
 import { PriceChart } from "@/components/PriceChart";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { fetchJson } from "@/lib/client-fetch";
 import { PROTOCOLS } from "@/lib/protocols";
@@ -34,13 +37,14 @@ export default function TrackerPage() {
 }
 
 function TrackerContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const urlSymbol = searchParams.get("symbol")?.trim().toUpperCase() || "BTC";
-  const [symbol, setSymbol] = useState(urlSymbol);
+  const [symbolInput, setSymbolInput] = useState(urlSymbol);
   const [historyRange, setHistoryRange] = useState<HistoryRange>("7d");
 
   useEffect(() => {
-    setSymbol(urlSymbol);
+    setSymbolInput(urlSymbol);
   }, [urlSymbol]);
 
   const asterQuery = useQuery({
@@ -61,7 +65,14 @@ function TrackerContent() {
     return Array.from(merged).sort().slice(0, 500);
   }, [asterQuery.data?.markets, hlQuery.data?.markets]);
 
-  const activeSymbol = symbol || "BTC";
+  const activeSymbol = urlSymbol || "BTC";
+
+  function submitSymbol(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const nextSymbol = symbolInput.trim().toUpperCase() || "BTC";
+    setSymbolInput(nextSymbol);
+    router.replace(`/tracker?symbol=${encodeURIComponent(nextSymbol)}`);
+  }
 
   return (
     <div className="space-y-6">
@@ -72,19 +83,23 @@ function TrackerContent() {
             输入币种后会同时展示 BN、Aster 与 Hyperliquid 上的 OI / Volume 历史；BN 的 OI 直接读取 5m 历史，Aster 与 Hyperliquid 的 OI 来自本地快照。
           </p>
         </div>
-        <div className="w-full sm:w-64">
+        <form className="flex w-full gap-2 sm:w-[360px]" onSubmit={submitSymbol}>
           <Input
             list="tracker-symbols"
-            value={symbol}
-            onChange={(event) => setSymbol(event.target.value.trim().toUpperCase())}
+            value={symbolInput}
+            onChange={(event) => setSymbolInput(event.target.value.trim().toUpperCase())}
             placeholder="BTC"
           />
+          <Button type="submit" variant="secondary" className="gap-2">
+            跳转
+            <ArrowRight className="h-4 w-4" />
+          </Button>
           <datalist id="tracker-symbols">
             {symbols.map((item) => (
               <option key={item} value={item} />
             ))}
           </datalist>
-        </div>
+        </form>
       </section>
 
       <CoinDescription symbol={activeSymbol} />
@@ -118,6 +133,10 @@ function TrackerContent() {
 
       <section>
         <PriceChart symbol={activeSymbol} />
+      </section>
+
+      <section>
+        <CoinAlertHistory symbol={activeSymbol} />
       </section>
     </div>
   );
